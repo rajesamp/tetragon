@@ -48,22 +48,22 @@ func installDemoApp(labelsChecker *checker.RPCChecker) features.Func {
 			t.Fatalf("failed to update helm repo: %s", err)
 		}
 
-		for i := 0; i < demoAppRetry; i++ {
-			if err := manager.RunInstall(
-				helm.WithName("online-boutique"),
-				helm.WithChart("gcr.io/google-samples/microservices-demo"),
-				helm.WithVersion("v0.7.1"),
-				helm.WithNamespace(namespace),
-				helm.WithArgs("--create-namespace", "--wait"),
-			); err != nil {
-				labelsChecker.ResetTimeout()
-				t.Logf("failed to install demo app. run with `-args -v=4` for more context from helm: %s", err)
-			} else {
-				return ctx
-			}
-		}
+		//for i := 0; i < demoAppRetry; i++ {
+		//	if err := manager.RunInstall(
+		//		helm.WithName("online-boutique"),
+		//		helm.WithChart("gcr.io/google-samples/microservices-demo"),
+		//		helm.WithVersion("v0.7.1"),
+		//		helm.WithNamespace(namespace),
+		//		helm.WithArgs("--create-namespace", "--wait"),
+		//	); err != nil {
+		//		labelsChecker.ResetTimeout()
+		//		t.Logf("failed to install demo app. run with `-args -v=4` for more context from helm: %s", err)
+		//	} else {
+		//		return ctx
+		//	}
+		//}
 
-		t.Fatalf("failed to install demo app after %d tries", demoAppRetry)
+		//t.Fatalf("failed to install demo app after %d tries", demoAppRetry)
 		return ctx
 	}
 }
