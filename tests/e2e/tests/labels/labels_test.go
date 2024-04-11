@@ -11,13 +11,14 @@ import (
 	"time"
 
 	ec "github.com/cilium/tetragon/api/v1/tetragon/codegen/eventchecker"
+	"sigs.k8s.io/e2e-framework/pkg/envconf"
+	"sigs.k8s.io/e2e-framework/pkg/features"
+	"sigs.k8s.io/e2e-framework/third_party/helm"
+
 	sm "github.com/cilium/tetragon/pkg/matchers/stringmatcher"
 	"github.com/cilium/tetragon/tests/e2e/checker"
 	"github.com/cilium/tetragon/tests/e2e/helpers"
 	"github.com/cilium/tetragon/tests/e2e/runners"
-	"sigs.k8s.io/e2e-framework/pkg/envconf"
-	"sigs.k8s.io/e2e-framework/pkg/features"
-	"sigs.k8s.io/e2e-framework/third_party/helm"
 )
 
 // This holds our test environment which we get from calling runners.NewRunner().Setup()
@@ -37,6 +38,13 @@ func installDemoApp(labelsChecker *checker.RPCChecker) features.Func {
 		}
 
 		if err := manager.RunRepo(helm.WithArgs("update")); err != nil {
+			t.Fatalf("failed to update helm repo: %s", err)
+		}
+
+		if err := manager.RunUpgrade(
+			helm.WithArgs("onlineboutique"),
+			helm.WithArgs("oci://us-docker.pkg.dev/online-boutique-ci/charts/onlineboutique"),
+			helm.WithArgs("--install")); err != nil {
 			t.Fatalf("failed to update helm repo: %s", err)
 		}
 
