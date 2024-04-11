@@ -44,7 +44,9 @@ func installDemoApp(labelsChecker *checker.RPCChecker) features.Func {
 		if err := manager.RunUpgrade(
 			helm.WithArgs("onlineboutique"),
 			helm.WithArgs("oci://us-docker.pkg.dev/online-boutique-ci/charts/onlineboutique"),
-			helm.WithArgs("--install")); err != nil {
+			helm.WithArgs("--install"),
+			helm.WithArgs("--create-namespace", "-n", namespace),
+		); err != nil {
 			t.Fatalf("failed to update helm repo: %s", err)
 		}
 
