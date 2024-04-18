@@ -113,20 +113,42 @@ func TestLabelsDemoApp(t *testing.T) {
 
 func labelsEventChecker() *checker.RPCChecker {
 	labelsEventChecker := ec.NewUnorderedEventChecker(
-		ec.NewProcessExecChecker("adservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("adservice"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
-		ec.NewProcessExecChecker("cartservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("cartservice"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
-		ec.NewProcessExecChecker("checkoutservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("checkoutservice"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
-		ec.NewProcessExecChecker("common").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("common"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
-		ec.NewProcessExecChecker("currencyservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("currencyservice"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
-		ec.NewProcessExecChecker("emailservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("emailservice"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
-		ec.NewProcessExecChecker("frontend").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("frontend"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
-		ec.NewProcessExecChecker("loadgenerator").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("loadgenerator"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
-		ec.NewProcessExecChecker("opentelemetry-collector").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("opentelemetrycollector"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
-		ec.NewProcessExecChecker("paymentservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("paymentservice"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
-		ec.NewProcessExecChecker("productcatalogservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("productcatalogservice"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
-		ec.NewProcessExecChecker("recommendationservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("recommendationservice"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
-		ec.NewProcessExecChecker("redis").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("redis-cart"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
-		ec.NewProcessExecChecker("shippingservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("shippingservice"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
+		ec.NewProcessExecChecker("adservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{
+			"app":               *sm.Full("adservice"),
+			"pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
+		ec.NewProcessExecChecker("cartservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{
+			"app":               *sm.Full("cartservice"),
+			"pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
+		ec.NewProcessExecChecker("checkoutservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{
+			"app":               *sm.Full("checkoutservice"),
+			"pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
+		ec.NewProcessExecChecker("currencyservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{
+			"app":               *sm.Full("currencyservice"),
+			"pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
+		ec.NewProcessExecChecker("emailservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{
+			"app":               *sm.Full("emailservice"),
+			"pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
+		ec.NewProcessExecChecker("frontend").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{
+			"app":               *sm.Full("frontend"),
+			"pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
+		ec.NewProcessExecChecker("loadgenerator").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{
+			"app":               *sm.Full("loadgenerator"),
+			"pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
+		ec.NewProcessExecChecker("paymentservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{
+			"app":               *sm.Full("paymentservice"),
+			"pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
+		ec.NewProcessExecChecker("productcatalogservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{
+			"app":               *sm.Full("productcatalogservice"),
+			"pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
+		ec.NewProcessExecChecker("recommendationservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{
+			"app":               *sm.Full("recommendationservice"),
+			"pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
+		ec.NewProcessExecChecker("redis").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{
+			"app":               *sm.Full("redis-cart"),
+			"pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
+		ec.NewProcessExecChecker("shippingservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{
+			"app":               *sm.Full("shippingservice"),
+			"pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
 	)
 
 	return checker.NewRPCChecker(labelsEventChecker, "labelsEventChecker")
