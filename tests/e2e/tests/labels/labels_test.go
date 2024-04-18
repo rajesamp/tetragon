@@ -33,39 +33,22 @@ const (
 func installDemoApp(labelsChecker *checker.RPCChecker) features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 		manager := helm.New(c.KubeconfigFile())
-		if err := manager.RunRepo(helm.WithArgs("add", "isovalent", "https://helm.isovalent.com")); err != nil {
-			t.Fatalf("failed to add helm repo: %s", err)
+
+		for i := 0; i < demoAppRetry; i++ {
+			if err := manager.RunUpgrade(
+				helm.WithArgs("onlineboutique"),
+				helm.WithArgs("oci://us-docker.pkg.dev/online-boutique-ci/charts/onlineboutique"),
+				helm.WithArgs("--install"),
+				helm.WithArgs("--create-namespace", "-n", namespace),
+			); err != nil {
+				labelsChecker.ResetTimeout()
+				t.Logf("failed to install demo app. run with `-args -v=4` for more context from helm: %s", err)
+			} else {
+				return ctx
+			}
 		}
 
-		if err := manager.RunRepo(helm.WithArgs("update")); err != nil {
-			t.Fatalf("failed to update helm repo: %s", err)
-		}
-
-		if err := manager.RunUpgrade(
-			helm.WithArgs("onlineboutique"),
-			helm.WithArgs("oci://us-docker.pkg.dev/online-boutique-ci/charts/onlineboutique"),
-			helm.WithArgs("--install"),
-			helm.WithArgs("--create-namespace", "-n", namespace),
-		); err != nil {
-			t.Fatalf("failed to update helm repo: %s", err)
-		}
-
-		//for i := 0; i < demoAppRetry; i++ {
-		//	if err := manager.RunInstall(
-		//		helm.WithName("online-boutique"),
-		//		helm.WithChart("gcr.io/google-samples/microservices-demo"),
-		//		helm.WithVersion("v0.7.1"),
-		//		helm.WithNamespace(namespace),
-		//		helm.WithArgs("--create-namespace", "--wait"),
-		//	); err != nil {
-		//		labelsChecker.ResetTimeout()
-		//		t.Logf("failed to install demo app. run with `-args -v=4` for more context from helm: %s", err)
-		//	} else {
-		//		return ctx
-		//	}
-		//}
-
-		//t.Fatalf("failed to install demo app after %d tries", demoAppRetry)
+		t.Fatalf("failed to install demo app after %d tries", demoAppRetry)
 		return ctx
 	}
 }
@@ -130,64 +113,20 @@ func TestLabelsDemoApp(t *testing.T) {
 
 func labelsEventChecker() *checker.RPCChecker {
 	labelsEventChecker := ec.NewUnorderedEventChecker(
-		ec.NewProcessExecChecker("coreapi").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{
-			"app":               *sm.Full("coreapi"),
-			"pod-template-hash": *sm.Regex("[a-f0-9]+"),
-		}))),
-		ec.NewProcessExecChecker("crawler").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{
-			"app":               *sm.Full("crawler"),
-			"pod-template-hash": *sm.Regex("[a-f0-9]+"),
-		}))),
-		ec.NewProcessExecChecker("elasticsearch").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{
-			"app":                                *sm.Full("elasticsearch-master"),
-			"chart":                              *sm.Full("elasticsearch"),
-			"controller-revision-hash":           *sm.Regex("elasticsearch-master-[a-f0-9]+"),
-			"release":                            *sm.Full("online-boutique"),
-			"statefulset.kubernetes.io/pod-name": *sm.Prefix("elasticsearch-master"),
-		}))),
-		ec.NewProcessExecChecker("jobposting").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{
-			"app":               *sm.Full("jobposting"),
-			"pod-template-hash": *sm.Regex("[a-f0-9]+"),
-		}))),
-		ec.NewProcessExecChecker("kafka").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{
-			"app.kubernetes.io/instance":         *sm.Full("online-boutique"),
-			"app.kubernetes.io/managed-by":       *sm.Full("strimzi-cluster-operator"),
-			"app.kubernetes.io/name":             *sm.Full("kafka"),
-			"app.kubernetes.io/part-of":          *sm.Full("strimzi-online-boutique"),
-			"statefulset.kubernetes.io/pod-name": *sm.Prefix("online-boutique-kafka"),
-			"strimzi.io/controller":              *sm.Full("strimzipodset"),
-			"strimzi.io/controller-name":         *sm.Full("online-boutique-kafka"),
-			"strimzi.io/cluster":                 *sm.Full("online-boutique"),
-			"strimzi.io/kind":                    *sm.Full("Kafka"),
-			"strimzi.io/name":                    *sm.Full("online-boutique-kafka"),
-			"strimzi.io/pod-name":                *sm.Prefix("online-boutique-kafka"),
-		}))),
-		ec.NewProcessExecChecker("zookeeper").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{
-			"app.kubernetes.io/instance":         *sm.Full("online-boutique"),
-			"app.kubernetes.io/managed-by":       *sm.Full("strimzi-cluster-operator"),
-			"app.kubernetes.io/name":             *sm.Full("zookeeper"),
-			"app.kubernetes.io/part-of":          *sm.Full("strimzi-online-boutique"),
-			"statefulset.kubernetes.io/pod-name": *sm.Prefix("online-boutique-zookeeper"),
-			"strimzi.io/cluster":                 *sm.Full("online-boutique"),
-			"strimzi.io/controller":              *sm.Full("strimzipodset"),
-			"strimzi.io/controller-name":         *sm.Full("online-boutique-zookeeper"),
-			"strimzi.io/kind":                    *sm.Full("Kafka"),
-			"strimzi.io/name":                    *sm.Full("online-boutique-zookeeper"),
-			"strimzi.io/pod-name":                *sm.Prefix("online-boutique-zookeeper"),
-		}))),
-		ec.NewProcessExecChecker("loader").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{
-			"app":               *sm.Full("loader"),
-			"pod-template-hash": *sm.Regex("[a-f0-9]+"),
-		}))),
-		ec.NewProcessExecChecker("recruiter").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{
-			"app":               *sm.Full("recruiter"),
-			"pod-template-hash": *sm.Regex("[a-f0-9]+"),
-		}))),
-		ec.NewProcessExecChecker("cluster-operator").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{
-			"name":              *sm.Full("strimzi-cluster-operator"),
-			"pod-template-hash": *sm.Regex("[a-f0-9]+"),
-			"strimzi.io/kind":   *sm.Full("cluster-operator"),
-		}))),
+		ec.NewProcessExecChecker("adservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("adservice"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
+		ec.NewProcessExecChecker("cartservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("cartservice"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
+		ec.NewProcessExecChecker("checkoutservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("checkoutservice"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
+		ec.NewProcessExecChecker("common").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("common"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
+		ec.NewProcessExecChecker("currencyservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("currencyservice"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
+		ec.NewProcessExecChecker("emailservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("emailservice"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
+		ec.NewProcessExecChecker("frontend").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("frontend"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
+		ec.NewProcessExecChecker("loadgenerator").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("loadgenerator"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
+		ec.NewProcessExecChecker("opentelemetry-collector").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("opentelemetrycollector"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
+		ec.NewProcessExecChecker("paymentservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("paymentservice"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
+		ec.NewProcessExecChecker("productcatalogservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("productcatalogservice"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
+		ec.NewProcessExecChecker("recommendationservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("recommendationservice"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
+		ec.NewProcessExecChecker("redis").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("redis-cart"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
+		ec.NewProcessExecChecker("shippingservice").WithProcess(ec.NewProcessChecker().WithPod(ec.NewPodChecker().WithPodLabels(map[string]sm.StringMatcher{"app": *sm.Full("shippingservice"), "pod-template-hash": *sm.Regex("[a-f0-9]+")}))),
 	)
 
 	return checker.NewRPCChecker(labelsEventChecker, "labelsEventChecker")
