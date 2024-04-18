@@ -57,7 +57,7 @@ func uninstallDemoApp() features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 		manager := helm.New(c.KubeconfigFile())
 		if err := manager.RunUninstall(
-			helm.WithName("online-boutique"),
+			helm.WithName("onlineboutique"),
 			helm.WithNamespace(namespace),
 		); err != nil {
 			t.Fatalf("failed to uninstall demo app. run with `-args -v=4` for more context from helm: %s", err)
