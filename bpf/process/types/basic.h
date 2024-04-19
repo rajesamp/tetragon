@@ -9,6 +9,7 @@
 #include "bpf_cred.h"
 #include "skb.h"
 #include "sock.h"
+#include "net_device.h"
 #include "../bpf_process_event.h"
 #include "bpfattr.h"
 #include "perfevent.h"
@@ -76,6 +77,8 @@ enum {
 	linux_binprm_type = 37,
 
 	data_loc_type = 38,
+
+	net_dev_ty = 39,
 
 	nop_s64_ty = -10,
 	nop_u64_ty = -11,
@@ -442,6 +445,7 @@ copy_path(char *args, const struct path *arg)
 	int size = 0, flags = 0;
 	char *buffer;
 	void *curr = &args[4];
+	umode_t i_mode;
 
 	buffer = d_path_local(arg, &size, &flags);
 	if (!buffer)
@@ -453,12 +457,14 @@ copy_path(char *args, const struct path *arg)
 	*s = size;
 	size += 4;
 
+	BPF_CORE_READ_INTO(&i_mode, arg, dentry, d_inode, i_mode);
+
 	/*
 	 * the format of the path is:
-	 * -------------------------------
-	 * | 4 bytes | N bytes | 4 bytes |
-	 * | pathlen |  path   |  flags  |
-	 * -------------------------------
+	 * -----------------------------------------
+	 * | 4 bytes | N bytes | 4 bytes | 2 bytes |
+	 * | pathlen |  path   |  flags  |   mode  |
+	 * -----------------------------------------
 	 * Next we set up the flags.
 	 */
 	asm volatile goto(
@@ -469,12 +475,14 @@ copy_path(char *args, const struct path *arg)
 		"r1 += r7;\n"
 		"r2 = *(u32 *)%[flags];\n"
 		"*(u32 *)(r1 + 0) = r2;\n"
+		"r2 = *(u16 *)%[mode];\n"
+		"*(u16 *)(r1 + 4) = r2;\n"
 		:
-		: [pid] "m"(args), [flags] "m"(flags), [offset] "+m"(size)
+		: [pid] "m"(args), [flags] "m"(flags), [offset] "+m"(size), [mode] "m"(i_mode)
 		: "r0", "r1", "r2", "r7", "memory"
 		: a);
 a:
-	size += sizeof(u32); // for the flags
+	size += sizeof(u32) + sizeof(u16); // for the flags + i_mode
 
 	return size;
 }
@@ -1623,6 +1631,8 @@ static inline __attribute__((always_inline)) size_t type_to_min_size(int type,
 		return sizeof(struct tg_kernel_module);
 	case linux_binprm_type:
 		return sizeof(struct msg_linux_binprm);
+	case net_dev_ty:
+		return IFNAMSIZ;
 	// nop or something else we do not process here
 	default:
 		return 0;
@@ -1803,6 +1813,7 @@ selector_arg_offset(__u8 *f, struct msg_generic_kprobe *e, __u32 selidx,
 			pass &= filter_file_buf(filter, (struct string_buf *)args);
 			break;
 		case string_type:
+		case net_dev_ty:
 		case data_loc_type:
 			/* for strings, we just encode the length */
 			pass &= filter_char_buf(filter, args, 4);
@@ -2253,18 +2264,25 @@ do_action(void *ctx, __u32 i, struct msg_generic_kprobe *e,
 		if (rate_limit(ratelimit_interval, ratelimit_scope, e))
 			*post = false;
 #endif /* __LARGE_BPF_PROG */
-		__u32 stack_trace = actions->act[++i];
+		__u32 kernel_stack_trace = actions->act[++i];
 
-		if (stack_trace) {
+		if (kernel_stack_trace) {
 			// Stack id 0 is valid so we need a flag.
-			e->common.flags |= MSG_COMMON_FLAG_STACKTRACE;
+			e->common.flags |= MSG_COMMON_FLAG_KERNEL_STACKTRACE;
 			// We could use BPF_F_REUSE_STACKID to override old with new stack if
 			// same stack id. It means that if we have a collision and user space
 			// reads the old one too late, we are reading the wrong stack (the new,
 			// old one was overwritten).
 			//
 			// Here we just signal that there was a collision returning -EEXIST.
-			e->stack_id = get_stackid(ctx, &stack_trace_map, 0);
+			e->kernel_stack_id = get_stackid(ctx, &stack_trace_map, 0);
+		}
+
+		__u32 user_stack_trace = actions->act[++i];
+
+		if (user_stack_trace) {
+			e->common.flags |= MSG_COMMON_FLAG_USER_STACKTRACE;
+			e->user_stack_id = get_stackid(ctx, &stack_trace_map, BPF_F_USER_STACK);
 		}
 		break;
 	}
@@ -2531,13 +2549,11 @@ read_call_arg(void *ctx, struct msg_generic_kprobe *e, int index, int type,
 		struct file *file;
 		probe_read(&file, sizeof(file), &arg);
 		path_arg = _(&file->f_path);
+		goto do_copy_path;
 	}
-		// fallthrough to copy_path
 	case path_ty: {
-		if (!path_arg)
-			probe_read(&path_arg, sizeof(path_arg), &arg);
-		size = copy_path(args, path_arg);
-		break;
+		probe_read(&path_arg, sizeof(path_arg), &arg);
+		goto do_copy_path;
 	}
 	case fd_ty: {
 		struct fdinstall_key key = { 0 };
@@ -2579,7 +2595,7 @@ read_call_arg(void *ctx, struct msg_generic_kprobe *e, int index, int type,
 		arg = (unsigned long)_(&bprm->file);
 		probe_read(&file, sizeof(file), (const void *)arg);
 		path_arg = _(&file->f_path);
-		size = copy_path(args, path_arg);
+		goto do_copy_path;
 	} break;
 #endif
 	case filename_ty: {
@@ -2591,6 +2607,11 @@ read_call_arg(void *ctx, struct msg_generic_kprobe *e, int index, int type,
 	case string_type:
 		size = copy_strings(args, (char *)arg, MAX_STRING);
 		break;
+	case net_dev_ty: {
+		struct net_device *dev = (struct net_device *)arg;
+
+		size = copy_strings(args, dev->name, IFNAMSIZ);
+	} break;
 	case data_loc_type: {
 		// data_loc: lower 16 bits is offset from ctx; upper 16 bits is length
 		long dl_len = (arg >> 16) & 0xfff; // masked to 4095 chars
@@ -2687,6 +2708,9 @@ read_call_arg(void *ctx, struct msg_generic_kprobe *e, int index, int type,
 		break;
 	}
 	return size;
+
+do_copy_path:
+	return copy_path(args, path_arg);
 }
 
 #endif /* __BASIC_H__ */

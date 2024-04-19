@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cilium/tetragon/pkg/fieldfilters"
 	"github.com/cilium/tetragon/pkg/metrics/errormetrics"
 	hubble "github.com/cilium/tetragon/pkg/oldhubble/cilium"
 	"github.com/sirupsen/logrus"
@@ -278,9 +279,10 @@ func initProcessInternalExec(
 	} else {
 		parentExecID = GetProcessID(0, 1)
 	}
+	creds := &event.Msg.Creds
 	execID := GetExecID(&process)
 	protoPod := GetPodInfo(containerID, process.Filename, args, process.NSPID)
-	apiCaps := caps.GetMsgCapabilities(event.Msg.Capabilities)
+	apiCaps := caps.GetMsgCapabilities(event.Msg.Creds.Cap)
 	binary := path.GetBinaryAbsolutePath(process.Filename, cwd)
 	apiNs, err := namespace.GetMsgNamespaces(event.Msg.Namespaces)
 	if err != nil {
@@ -294,7 +296,6 @@ func initProcessInternalExec(
 		}).Warn("ExecveEvent: parsing namespaces failed")
 	}
 
-	creds := &event.Msg.Creds
 	apiCreds := &tetragon.ProcessCredentials{
 		Uid:        &wrapperspb.UInt32Value{Value: creds.Uid},
 		Gid:        &wrapperspb.UInt32Value{Value: creds.Gid},
@@ -350,6 +351,11 @@ func initProcessInternalExec(
 		process.TID = process.PID
 		errormetrics.ErrorTotalInc(errormetrics.ProcessPidTidMismatch)
 	}
+
+	if fieldfilters.RedactionFilters != nil {
+		args = fieldfilters.RedactionFilters.Redact(binary, args)
+	}
+
 	return &ProcessInternal{
 		process: &tetragon.Process{
 			Pid:          &wrapperspb.UInt32Value{Value: process.PID},

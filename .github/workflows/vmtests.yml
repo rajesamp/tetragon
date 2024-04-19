@@ -27,7 +27,7 @@ jobs:
       uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5.0.0
       with:
         # renovate: datasource=golang-version depName=go
-        go-version: '1.22.0'
+        go-version: '1.22.2'
 
     - name: Install build dependencies
       run: |
@@ -67,19 +67,21 @@ jobs:
         matrix:
            kernel:
               # renovate: datasource=docker depName=quay.io/lvh-images/kernel-images
-              - 'bpf-next-20240228.012524'
+              - 'rhel8-20240415.162748'
               # renovate: datasource=docker depName=quay.io/lvh-images/kernel-images
-              - '6.6-20240221.111541'
+              - 'bpf-next-20240415.162748'
               # renovate: datasource=docker depName=quay.io/lvh-images/kernel-images
-              - '6.1-20240221.111541'
+              - '6.6-20240415.162748'
               # renovate: datasource=docker depName=quay.io/lvh-images/kernel-images
-              - '5.15-20240221.111541'
+              - '6.1-20240415.162748'
               # renovate: datasource=docker depName=quay.io/lvh-images/kernel-images
-              - '5.10-20240221.111541'
+              - '5.15-20240415.162748'
               # renovate: datasource=docker depName=quay.io/lvh-images/kernel-images
-              - '5.4-20240221.111541'
+              - '5.10-20240415.162748'
               # renovate: datasource=docker depName=quay.io/lvh-images/kernel-images
-              - '4.19-20240221.111541'
+              - '5.4-20240415.162748'
+              # renovate: datasource=docker depName=quay.io/lvh-images/kernel-images
+              - '4.19-20240415.162748'
            group:
               - 0
     concurrency:
@@ -160,7 +162,7 @@ jobs:
     if: success()
     steps:
       # delete the built binaries from the artifacts in case of overall success
-      - uses: geekyeggo/delete-artifact@65041433121f7239077fa20be14c0690f70569de # v4.1.0
+      - uses: geekyeggo/delete-artifact@24928e75e6e6590170563b8ddae9fac674508aa1 # v5.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           name: tetragon-build

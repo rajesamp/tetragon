@@ -44,6 +44,7 @@ import (
 	"github.com/cilium/tetragon/pkg/process"
 	"github.com/cilium/tetragon/pkg/ratelimit"
 	"github.com/cilium/tetragon/pkg/reader/namespace"
+	"github.com/cilium/tetragon/pkg/reader/proc"
 	"github.com/cilium/tetragon/pkg/rthooks"
 	"github.com/cilium/tetragon/pkg/sensors/base"
 	"github.com/cilium/tetragon/pkg/sensors/program"
@@ -106,6 +107,18 @@ func getFieldFilters() ([]*tetragon.FieldFilter, error) {
 	}
 
 	return filters, nil
+}
+
+func setRedactionFilters() error {
+	var err error
+	redactionFilters := viper.GetString(option.KeyRedactionFilters)
+	fieldfilters.RedactionFilters, err = fieldfilters.ParseRedactionFilterList(redactionFilters)
+	if err == nil {
+		log.WithFields(logrus.Fields{"redactionFilters": redactionFilters}).Info("Configured redaction filters")
+	} else {
+		log.WithError(err).Error("Error configuring redaction filters")
+	}
+	return err
 }
 
 // Save daemon information so it is used by client cli but
@@ -175,6 +188,9 @@ func tetragonExecute() error {
 
 	// Create run dir early
 	os.MkdirAll(defaults.DefaultRunDir, 0755)
+
+	// Log early security context in case something fails
+	proc.LogCurrentSecurityContext()
 
 	// When an instance terminates or restarts it may cleanup bpf programs,
 	// having a check here to see if another instance is already running, can
@@ -274,7 +290,7 @@ func tetragonExecute() error {
 	}
 
 	// Get observer from configFile
-	obs := observer.NewObserver(option.Config.TracingPolicy)
+	obs := observer.NewObserver()
 	defer func() {
 		obs.PrintStats()
 	}()
@@ -401,6 +417,11 @@ func tetragonExecute() error {
 
 	hookRunner := rthooks.GlobalRunner().WithWatcher(k8sWatcher)
 
+	err = setRedactionFilters()
+	if err != nil {
+		return err
+	}
+
 	pm, err := tetragonGrpc.NewProcessManager(
 		ctx,
 		&cleanupWg,
@@ -428,12 +449,12 @@ func tetragonExecute() error {
 	obs.LogPinnedBpf(observerDir)
 
 	// load base sensor
-	base := base.GetInitialSensor()
-	if err := base.Load(observerDir); err != nil {
+	initialSensor := base.GetInitialSensor()
+	if err := initialSensor.Load(observerDir); err != nil {
 		return err
 	}
 	defer func() {
-		base.Unload()
+		initialSensor.Unload()
 	}()
 
 	// now that the base sensor was loaded, we can start the sensor manager
@@ -705,7 +726,7 @@ func startExporter(ctx context.Context, server *server.Server) error {
 		}
 	}
 	req := tetragon.GetEventsRequest{AllowList: allowList, DenyList: denyList, AggregationOptions: aggregationOptions, FieldFilters: fieldFilters}
-	log.WithFields(logrus.Fields{"fieldFilters": fieldFilters}).Debug("Configured field filters")
+	log.WithFields(logrus.Fields{"fieldFilters": fieldFilters}).Info("Configured field filters")
 	log.WithFields(logrus.Fields{"logger": writer, "request": &req}).Info("Starting JSON exporter")
 	exporter := exporter.NewExporter(ctx, &req, server, encoder, writer, rateLimiter)
 	return exporter.Start()

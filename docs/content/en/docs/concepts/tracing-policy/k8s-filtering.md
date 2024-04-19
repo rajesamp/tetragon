@@ -1,7 +1,7 @@
 ---
-title: "K8s namespace and pod label filtering"
+title: "K8s Policy Filtering"
 weight: 4
-description: "Tetragon in-kernel filtering based on Kubernetes namespaces and pod label filters"
+description: "Tetragon in-kernel filtering based on Kubernetes namespaces, pod labels, and container fields"
 ---
 
 {{< caution >}}
@@ -14,13 +14,18 @@ Tetragon is configured via [TracingPolicies]({{< ref "/docs/concepts/tracing-pol
 speaking, TracingPolicies define _what_ situations Tetragon should react to and _how_. The _what_
 can be, for example, specific system calls with specific argument values. The _how_ defines what
 action the Tetragon agent should perform when the specified situation occurs. The most common action
-is generating an event, but there are others (e.g., returning an error without executing a function,
+is generating an event, but there are others (e.g., returning an error without executing the function,
 or killing the corresponding process).
 
-Here we discuss how to  apply tracing policies only on a subset of pods running on the system via
-two mechanisms: namespaced policies, and pod-label filters. Tetragon implements both mechanisms
-in-kernel via eBPF. This is important for both observability and enforcement use-cases. For
-observability, copying only the relevant events from kernel- to user-space reduces overhead. For
+Here we discuss how to apply tracing policies only on a subset of pods running on the system via
+the followings mechanisms:
+- namespaced policies
+- pod-label filters
+- container field filters
+
+Tetragon implements these mechanisms in-kernel via eBPF. This is important for both observability
+and enforcement use-cases.
+For observability, copying only the relevant events from kernel- to user-space reduces overhead. For
 enforcement, performing the enforcement action in the kernel avoids the race-condition of doing it
 in user-space. For example, let us consider the case where we want to block an application from
 performing a system call. Performing the filtering in-kernel means that the application will never
@@ -44,6 +49,10 @@ namespace.
 For pod label filters, we use the `PodSelector` field of tracing policies to select the pods that
 the policy is applied to.
 
+## Container field filters
+
+For container field filters, we use the `containerSelector` field of tracing policies to select the containers that the policy is applied to. At the moment, the only supported field is `name`.
+
 ## Demo
 
 ### Setup
@@ -61,7 +70,6 @@ minikube ssh -- sudo mount bpffs -t bpf /sys/fs/bpf
 helm install --namespace kube-system \
 	--set tetragonOperator.image.override=cilium/tetragon-operator:latest \
 	--set tetragon.image.override=cilium/tetragon:latest  \
-	--set tetragon.enablePolicyFilter="true" \
 	--set tetragon.grpc.address="unix:///var/run/cilium/tetragon/tetragon.sock" \
 	tetragon ./install/kubernetes/tetragon
 ```
@@ -257,4 +265,83 @@ If you don't see a command prompt, try pressing enter.
 >>> os.lseek(-1, 0, 0)
 pod "test" deleted
 pod default/test terminated (Error)
+```
+
+### Container field filters
+
+Let's install a tracing policy with a container field filter.
+
+```shell
+cat << EOF | kubectl apply -f -
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: "lseek-podfilter"
+spec:
+  containerSelector:
+    matchExpressions:
+      - key: name
+        operator: In
+        values:
+        - main
+  kprobes:
+  - call: "sys_lseek"
+    syscall: true
+    args:
+    - index: 0
+      type: "int"
+    selectors:
+    - matchArgs:
+      - index: 0
+        operator: "Equal"
+        values:
+        - "-1"
+      matchActions:
+      - action: Sigkill
+EOF
+```
+
+Let's create a pod with 2 containers:
+
+```shell
+cat << EOF | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: lseek-pod
+spec:
+  containers:
+  - name: main
+    image: python
+    command: ['sh', '-c', 'sleep infinity']
+  - name: sidecar
+    image: python
+    command: ['sh', '-c', 'sleep infinity']
+EOF
+```
+
+Containers that don't match the name `main` will not be affected:
+
+```shell
+kubectl exec -it lseek-pod -c sidecar -- python3
+```
+
+```
+>>> import os
+>>> os.lseek(-1, 0, 0)
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  OSError: [Errno 9] Bad file descriptor
+>>>
+```
+
+But containers matching the name `main` will:
+```shell
+kubectl exec -it lseek-pod -c main -- python3
+```
+
+```
+>>> import os
+>>> os.lseek(-1, 0, 0)
+command terminated with exit code 137
 ```

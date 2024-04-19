@@ -97,6 +97,9 @@ options:
     - name: expose-kernel-addresses
       default_value: "false"
       usage: Expose real kernel addresses in events stack traces
+    - name: expose-stack-addresses
+      default_value: "false"
+      usage: Expose real linear addresses in events stack traces
     - name: field-filters
       usage: Field filters for event exports
     - name: force-large-progs
@@ -133,8 +136,9 @@ options:
     - name: memprofile
       usage: Store MEM profile into provided file
     - name: metrics-label-filter
+      default_value: namespace,workload,pod,binary
       usage: |
-        Comma-separated list of enabled metric labels. (e.g. "namespace,workload,pod,binary") By default all labels are enabled.
+        Comma-separated list of enabled metrics labels. Unknown labels will be ignored.
     - name: metrics-server
       usage: Metrics server address (e.g. ':2112'). Disabled by default
     - name: netns-dir
@@ -160,6 +164,8 @@ options:
       default_value: "0"
       usage: |
         Set perf ring buffer size in total for all cpus (default 65k per cpu, allows K/M/G suffix)
+    - name: redaction-filters
+      usage: Redaction filters for events
     - name: release-pinned-bpf
       default_value: "true"
       usage: |

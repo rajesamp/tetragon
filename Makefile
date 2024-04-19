@@ -32,6 +32,9 @@ endif
 ifeq ($(UNAME_M),aarch64)
 	TARGET_ARCH ?= arm64
 endif
+ifeq ($(UNAME_M),arm64)
+	TARGET_ARCH ?= arm64
+endif
 TARGET_ARCH ?= amd64
 
 # Set GOARCH to TARGET_ARCH only if it's not set so that we can still use both
@@ -122,6 +125,10 @@ help:
 	@echo '    Documentation:'
 	@echo '        docs              - preview documentation website'
 	@echo '        metrics-docs      - generate metrics reference documentation page'
+	@echo 'End-to-end tests: '
+	@echo '    e2e-test                                        - run e2e tests'
+	@echo '    e2e-test E2E_BUILD_IMAGES=0                     - run e2e tests without (re-)building images'
+	@echo '    e2e-test E2E_TESTS=./tests/e2e/tests/skeleton   - run a specific e2e test'
 	@echo 'Options:'
 	@echo '    TARGET_ARCH            - target architecture to build for (e.g. amd64 or arm64)'
 	@echo '    BPF_TARGET_ARCH        - target architecture for BPF progs, set by TARGET_ARCH'
@@ -153,7 +160,7 @@ tetragon-bpf-local:
 
 tetragon-bpf-container:
 	$(CONTAINER_ENGINE) rm tetragon-clang || true
-	$(CONTAINER_ENGINE) run -v $(CURDIR):/tetragon:Z -u $$(id -u) -e BPF_TARGET_ARCH=$(BPF_TARGET_ARCH) --name tetragon-clang $(CLANG_IMAGE) $(MAKE) -C /tetragon/bpf -j$(JOBS) $(__BPF_DEBUG_FLAGS)
+	$(CONTAINER_ENGINE) run -v $(CURDIR):/tetragon:Z -u $$(id -u) -e BPF_TARGET_ARCH=$(BPF_TARGET_ARCH) --name tetragon-clang $(CLANG_IMAGE) make -C /tetragon/bpf -j$(JOBS) $(__BPF_DEBUG_FLAGS)
 	$(CONTAINER_ENGINE) rm tetragon-clang
 
 .PHONY: bpf-test
@@ -204,7 +211,7 @@ install:
 vendor:
 	$(MAKE) -C ./api vendor
 	$(MAKE) -C ./pkg/k8s vendor
-	$(MAKE) -C ./contrib/rthooks/tetragon-oci-hook
+	$(MAKE) -C ./contrib/rthooks/tetragon-oci-hook vendor
 	$(GO) mod tidy
 	$(GO) mod vendor
 	$(GO) mod verify
@@ -218,11 +225,11 @@ clean: cli-clean tarball-clean
 
 .PHONY: test
 test: tester-progs tetragon-bpf
-	$(SUDO) $(GO) test -p 1 -parallel 1 $(GOFLAGS) -gcflags=$(GO_BUILD_GCFLAGS) -timeout $(GO_TEST_TIMEOUT) -failfast -cover ./pkg/... ./cmd/... ./operator/... ${EXTRA_TESTFLAGS}
+	$(GO) test -exec "$(SUDO)" -p 1 -parallel 1 $(GOFLAGS) -gcflags=$(GO_BUILD_GCFLAGS) -timeout $(GO_TEST_TIMEOUT) -failfast -cover ./pkg/... ./cmd/... ./operator/... ${EXTRA_TESTFLAGS}
 
 .PHONY: bench
 bench:
-	$(SUDO) $(GO) test -p 1 -parallel 1 -run ^$$ $(GOFLAGS) -gcflags=$(GO_BUILD_GCFLAGS) -timeout $(GO_TEST_TIMEOUT) -failfast -cover ./pkg/... ./cmd/... ./operator/... -bench=. ${EXTRA_TESTFLAGS} 
+	$(GO) test -exec "$(SUDO)" -p 1 -parallel 1 -run ^$$ $(GOFLAGS) -gcflags=$(GO_BUILD_GCFLAGS) -timeout $(GO_TEST_TIMEOUT) -failfast -cover ./pkg/... ./cmd/... ./operator/... -bench=. ${EXTRA_TESTFLAGS}
 
 # Agent image to use for end-to-end tests
 E2E_AGENT ?= "cilium/tetragon:$(DOCKER_IMAGE_TAG)"
@@ -238,6 +245,7 @@ else
 endif
 # Build image and operator images locally before running test. Set to 0 to disable.
 E2E_BUILD_IMAGES ?= 1
+E2E_TESTS ?= ./tests/e2e/tests/...
 
 # Run an e2e-test
 .PHONY: e2e-test
@@ -246,7 +254,7 @@ e2e-test: image image-operator
 else
 e2e-test:
 endif
-	$(GO) test -p 1 -parallel 1 $(GOFLAGS) -gcflags=$(GO_BUILD_GCFLAGS) -timeout $(E2E_TEST_TIMEOUT) -failfast -cover ./tests/e2e/tests/... ${EXTRA_TESTFLAGS} -fail-fast -tetragon.helm.set tetragon.image.override="$(E2E_AGENT)" -tetragon.helm.set tetragonOperator.image.override="$(E2E_OPERATOR)" -tetragon.helm.url="" -tetragon.helm.chart="$(realpath ./install/kubernetes/tetragon)" $(E2E_BTF_FLAGS)
+	$(GO) test -p 1 -parallel 1 $(GOFLAGS) -gcflags=$(GO_BUILD_GCFLAGS) -timeout $(E2E_TEST_TIMEOUT) -failfast -cover $(E2E_TESTS) ${EXTRA_TESTFLAGS} -fail-fast -tetragon.helm.set tetragon.image.override="$(E2E_AGENT)" -tetragon.helm.set tetragonOperator.image.override="$(E2E_OPERATOR)" -tetragon.helm.url="" -tetragon.helm.chart="$(realpath ./install/kubernetes/tetragon)" $(E2E_BTF_FLAGS)
 
 TEST_COMPILE ?= ./...
 .PHONY: test-compile
@@ -334,7 +342,7 @@ tarball-clean:
 fetch-testdata:
 	wget -nc -P testdata/btf 'https://github.com/cilium/tetragon-testdata/raw/main/btf/vmlinux-5.4.104+'
 
-.PHONY: crdgen generate protogen codegen protoc-gen-go-tetragon
+.PHONY: generate crds protogen codegen protoc-gen-go-tetragon
 generate: | crds
 crds:
 	# Need to call vendor twice here, once before and once after generate, the reason
@@ -355,7 +363,7 @@ protoc-gen-go-tetragon:
 	$(GO_BUILD) -o bin/$@ ./tools/protoc-gen-go-tetragon/
 
 # renovate: datasource=docker
-GOLANGCILINT_IMAGE=docker.io/golangci/golangci-lint:v1.56.2@sha256:04c2e881e069d6827ddca7d9c4fcf4de46eda0c10e58692609a047f8a09a0274
+GOLANGCILINT_IMAGE=docker.io/golangci/golangci-lint:v1.57.2@sha256:8f3a60a00a83bb7d599d2e028ac0c3573dc2b9ec0842590f1c2e59781c821da7
 GOLANGCILINT_WANT_VERSION := $(subst @sha256,,$(patsubst v%,%,$(word 2,$(subst :, ,$(lastword $(subst /, ,$(GOLANGCILINT_IMAGE)))))))
 GOLANGCILINT_VERSION = $(shell golangci-lint version 2>/dev/null)
 .PHONY: check
@@ -415,7 +423,7 @@ docs:
 kind:
 	./contrib/localdev/bootstrap-kind-cluster.sh
 
-.PHONY: kind-install-tetragon 
+.PHONY: kind-install-tetragon
 kind-install-tetragon:
 	./contrib/localdev/install-tetragon.sh --image cilium/tetragon:latest --operator cilium/tetragon-operator:latest
 

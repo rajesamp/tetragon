@@ -17,6 +17,19 @@ permissions:
   contents: read
 
 jobs:
+  ensure-no-binary-checkin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      
+      - name: Ensure No Binary Files Checked In
+        run: |
+          echo "Checking for any checked in binary files not in allowlist..." 
+          outfile="$(mktemp)"
+          find . -type f -size +0 -not -wholename '**/vendor/**' -not -wholename '**/_vendor/**' -not -wholename '**/.git/**' -not -name '*.png' -not -name '*.jpg' -not -name '*.ico' | xargs -n 100 grep -IL '' | tee "$outfile"
+          test -z "$(cat $outfile)"
+
   golangci-lint:
     runs-on: ubuntu-latest
     steps:
@@ -27,7 +40,7 @@ jobs:
         uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5.0.0
         with:
           # renovate: datasource=golang-version depName=go
-          go-version: '1.22.0'
+          go-version: '1.22.2'
           # using golangci-lint cache instead
           cache: false
 
@@ -35,7 +48,7 @@ jobs:
         uses: golangci/golangci-lint-action@3cfe3a4abbb849e10058ce4af15d205b6da42804 # v4.0.0
         with:
           # renovate: datasource=docker depName=docker.io/golangci/golangci-lint
-          version: v1.56.2
+          version: v1.57.2
           args: --config=.golangci.yml --verbose
 
   format:
@@ -48,7 +61,7 @@ jobs:
         uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5.0.0
         with:
           # renovate: datasource=golang-version depName=go
-          go-version: '1.22.0'
+          go-version: '1.22.2'
 
       - name: Check gofmt formatting
         run: |
@@ -78,7 +91,7 @@ jobs:
         uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5.0.0
         with:
           # renovate: datasource=golang-version depName=go
-          go-version: '1.22.0'
+          go-version: '1.22.2'
 
       - name: Check module vendoring
         run: |

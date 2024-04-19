@@ -49,13 +49,18 @@ type KProbeSpec struct {
 	// +kubebuilder:validation:Optional
 	// Selectors to apply before producing trace output. Selectors are ORed.
 	Selectors []KProbeSelector `json:"selectors,omitempty"`
+	// +kubebuilder:validation:optional
+	// +kubebuilder:validation:MaxItems=16
+	// Tags to categorize the event, will be include in the event output.
+	// Maximum of 16 Tags are supported.
+	Tags []string `json:"tags,omitempty"`
 }
 
 type KProbeArg struct {
 	// +kubebuilder:validation:Minimum=0
 	// Position of the argument.
 	Index uint32 `json:"index"`
-	// +kubebuilder:validation:Enum=auto;int;int8;uint8;int16;uint16;uint32;int32;uint64;int64;char_buf;char_iovec;size_t;skb;sock;string;fd;file;filename;path;nop;bpf_attr;perf_event;bpf_map;user_namespace;capability;kiocb;iov_iter;cred;load_info;module;syscall64;kernel_cap_t;cap_inheritable;cap_permitted;cap_effective;linux_binprm;data_loc
+	// +kubebuilder:validation:Enum=auto;int;int8;uint8;int16;uint16;uint32;int32;uint64;int64;char_buf;char_iovec;size_t;skb;sock;string;fd;file;filename;path;nop;bpf_attr;perf_event;bpf_map;user_namespace;capability;kiocb;iov_iter;cred;load_info;module;syscall64;kernel_cap_t;cap_inheritable;cap_permitted;cap_effective;linux_binprm;data_loc;net_device
 	// +kubebuilder:default=auto
 	// Argument type.
 	Type string `json:"type"`
@@ -229,8 +234,11 @@ type ActionSelector struct {
 	// Only valid with the post action and with a rateLimit specified.
 	RateLimitScope string `json:"rateLimitScope"`
 	// +kubebuilder:validation:Optional
-	// Enable stack trace export. Only valid with the post action.
-	StackTrace bool `json:"stackTrace"`
+	// Enable kernel stack trace export. Only valid with the post action.
+	KernelStackTrace bool `json:"kernelStackTrace"`
+	// +kubebuilder:validation:Optional
+	// Enable user stack trace export. Only valid with the post action.
+	UserStackTrace bool `json:"userStackTrace"`
 }
 
 type TracepointSpec struct {
@@ -248,6 +256,11 @@ type TracepointSpec struct {
 	// +kubebuilder:validation:Optional
 	// Selectors to apply before producing trace output. Selectors are ORed.
 	Selectors []KProbeSelector `json:"selectors,omitempty"`
+	// +kubebuilder:validation:optional
+	// +kubebuilder:validation:MaxItems=16
+	// Tags to categorize the event, will be include in the event output.
+	// Maximum of 16 Tags are supported.
+	Tags []string `json:"tags,omitempty"`
 }
 
 type UProbeSpec struct {
@@ -265,6 +278,11 @@ type UProbeSpec struct {
 	// +kubebuilder:validation:Optional
 	// A list of function arguments to include in the trace output.
 	Args []KProbeArg `json:"args,omitempty"`
+	// +kubebuilder:validation:optional
+	// +kubebuilder:validation:MaxItems=16
+	// Tags to categorize the event, will be include in the event output.
+	// Maximum of 16 Tags are supported.
+	Tags []string `json:"tags,omitempty"`
 }
 
 type ListSpec struct {

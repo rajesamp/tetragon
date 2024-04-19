@@ -31,6 +31,7 @@ const (
 	BPF_OBJ_NAME_LEN = 16
 	KSYM_NAME_LEN    = 128
 	MODULE_NAME_LEN  = 64
+	NETDEV_NAME_LEN  = 16
 )
 
 type MsgLoader struct {
@@ -44,23 +45,25 @@ type MsgLoader struct {
 }
 
 type MsgGenericKprobe struct {
-	Common       processapi.MsgCommon
-	ProcessKey   processapi.MsgExecveKey
-	Namespaces   processapi.MsgNamespaces
-	Capabilities processapi.MsgCapabilities
-	FuncId       uint64
-	RetProbeId   uint64
-	ActionId     uint64
-	ActionArgId  uint32
-	Tid          uint32 // The recorded TID that triggered the event
-	StackID      int64
+	Common        processapi.MsgCommon
+	ProcessKey    processapi.MsgExecveKey
+	Namespaces    processapi.MsgNamespaces
+	Capabilities  processapi.MsgCapabilities
+	FuncId        uint64
+	RetProbeId    uint64
+	ActionId      uint64
+	ActionArgId   uint32
+	Tid           uint32 // The recorded TID that triggered the event
+	KernelStackID int64
+	UserStackID   int64
 }
 
 type MsgGenericKprobeArgPath struct {
-	Index uint64
-	Value string
-	Flags uint32
-	Label string
+	Index      uint64
+	Value      string
+	Flags      uint32
+	Permission uint16
+	Label      string
 }
 
 func (m MsgGenericKprobeArgPath) GetIndex() uint64 {
@@ -72,10 +75,11 @@ func (m MsgGenericKprobeArgPath) IsReturnArg() bool {
 }
 
 type MsgGenericKprobeArgFile struct {
-	Index uint64
-	Value string
-	Flags uint32
-	Label string
+	Index      uint64
+	Value      string
+	Flags      uint32
+	Permission uint16
+	Label      string
 }
 
 func (m MsgGenericKprobeArgFile) GetIndex() uint64 {
@@ -249,19 +253,23 @@ func (m MsgGenericKprobeArgSkb) IsReturnArg() bool {
 	return m.Index == ReturnArgIndex
 }
 
-type MsgGenericCred struct {
-	Uid        uint32
-	Gid        uint32
-	Suid       uint32
-	Sgid       uint32
-	Euid       uint32
-	Egid       uint32
-	FSuid      uint32
-	FSgid      uint32
-	SecureBits uint32
-	Pad        uint32
-	Cap        processapi.MsgCapabilities
-	UserNs     processapi.MsgUserNamespace
+type MsgGenericKprobeNetDev struct {
+	OrigSize uint64 // if len(Value) < OrigSize, then the result was truncated
+	Name     []byte
+}
+
+type MsgGenericKprobeArgNetDev struct {
+	Index uint64
+	Name  string
+	Label string
+}
+
+func (m MsgGenericKprobeArgNetDev) GetIndex() uint64 {
+	return m.Index
+}
+
+func (m MsgGenericKprobeArgNetDev) IsReturnArg() bool {
+	return m.Index == ReturnArgIndex
 }
 
 type MsgGenericKprobeArgCred struct {
@@ -386,9 +394,11 @@ type MsgGenericKprobeLinuxBinprm struct {
 }
 
 type MsgGenericKprobeArgLinuxBinprm struct {
-	Index uint64
-	Value string
-	Label string
+	Index      uint64
+	Value      string
+	Flags      uint32
+	Permission uint16
+	Label      string
 }
 
 func (m MsgGenericKprobeArgLinuxBinprm) GetIndex() uint64 {

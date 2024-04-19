@@ -48,6 +48,10 @@ The total number of Tetragon errors. For internal use only.
 
 The total number of Tetragon event cache accesses. For internal use only.
 
+### `tetragon_event_cache_entries`
+
+The number of entries in the event cache.
+
 ### `tetragon_event_cache_errors_total`
 
 The total of errors encountered while fetching process exec information from the cache.
@@ -133,6 +137,22 @@ The latency of handling messages in us.
 | ----- | ------ |
 | `op   ` | `11, 13, 14, 15, 23, 24, 25, 26, 5, 7` |
 
+### `tetragon_map_capacity`
+
+Capacity of a BPF map. Expected to be constant.
+
+| label | values |
+| ----- | ------ |
+| `map  ` | `execve_map, tg_execve_joined_info_map` |
+
+### `tetragon_map_entries`
+
+The total number of in-use entries per map.
+
+| label | values |
+| ----- | ------ |
+| `map  ` | `execve_map, tg_execve_joined_info_map` |
+
 ### `tetragon_map_errors_total`
 
 The number of errors per map.
@@ -140,15 +160,6 @@ The number of errors per map.
 | label | values |
 | ----- | ------ |
 | `map  ` | `execve_map, tg_execve_joined_info_map` |
-
-### `tetragon_map_in_use_gauge`
-
-The total number of in-use entries per map.
-
-| label | values |
-| ----- | ------ |
-| `map  ` | `execve_map, tg_execve_joined_info_map` |
-| `total` | `    0` |
 
 ### `tetragon_missed_events_total`
 
@@ -170,14 +181,27 @@ The total number of times we encounter a given message opcode. For internal use 
 
 The total number of events dropped because listener buffer was full
 
+### `tetragon_policyfilter_hook_container_name_missing_total`
+
+The total number of operations when the container name was missing in the OCI hook
+
 ### `tetragon_policyfilter_metrics_total`
 
 Policy filter metrics. For internal use only.
 
 | label | values |
 | ----- | ------ |
+| `error` | `generic-error, pod-namespace-conflict` |
 | `op   ` | `add, add-container, delete, update` |
 | `subsys` | `pod-handlers, rthooks` |
+
+### `tetragon_process_cache_capacity`
+
+The capacity of the process cache. Expected to be constant.
+
+### `tetragon_process_cache_size`
+
+The size of the process cache
 
 ### `tetragon_process_loader_stats`
 

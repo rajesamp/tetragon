@@ -19,6 +19,7 @@ import (
 	"github.com/cilium/tetragon/pkg/logger"
 	"github.com/cilium/tetragon/pkg/option"
 	"github.com/cilium/tetragon/pkg/process"
+	"github.com/cilium/tetragon/pkg/procsyms"
 	"github.com/cilium/tetragon/pkg/reader/bpf"
 	"github.com/cilium/tetragon/pkg/reader/caps"
 	"github.com/cilium/tetragon/pkg/reader/network"
@@ -83,6 +84,12 @@ func getKprobeArgument(arg tracingapi.MsgGenericKprobeArg) *tetragon.KprobeArgum
 		a.Label = e.Label
 	case api.MsgGenericKprobeArgString:
 		a.Arg = &tetragon.KprobeArgument_StringArg{StringArg: e.Value}
+		a.Label = e.Label
+	case api.MsgGenericKprobeArgNetDev:
+		netDevArg := &tetragon.KprobeNetDev{
+			Name: e.Name,
+		}
+		a.Arg = &tetragon.KprobeArgument_NetDevArg{NetDevArg: netDevArg}
 		a.Label = e.Label
 	case api.MsgGenericKprobeArgSock:
 		sockArg := &tetragon.KprobeSock{
@@ -162,15 +169,17 @@ func getKprobeArgument(arg tracingapi.MsgGenericKprobeArg) *tetragon.KprobeArgum
 		a.Label = e.Label
 	case api.MsgGenericKprobeArgFile:
 		fileArg := &tetragon.KprobeFile{
-			Path:  e.Value,
-			Flags: path.FilePathFlagsToStr(e.Flags),
+			Path:       e.Value,
+			Flags:      path.FilePathFlagsToStr(e.Flags),
+			Permission: path.FilePathModeToStr(e.Permission),
 		}
 		a.Arg = &tetragon.KprobeArgument_FileArg{FileArg: fileArg}
 		a.Label = e.Label
 	case api.MsgGenericKprobeArgPath:
 		pathArg := &tetragon.KprobePath{
-			Path:  e.Value,
-			Flags: path.FilePathFlagsToStr(e.Flags),
+			Path:       e.Value,
+			Flags:      path.FilePathFlagsToStr(e.Flags),
+			Permission: path.FilePathModeToStr(e.Permission),
 		}
 		a.Arg = &tetragon.KprobeArgument_PathArg{PathArg: pathArg}
 		a.Label = e.Label
@@ -251,7 +260,9 @@ func getKprobeArgument(arg tracingapi.MsgGenericKprobeArg) *tetragon.KprobeArgum
 		a.Label = e.Label
 	case api.MsgGenericKprobeArgLinuxBinprm:
 		lArg := &tetragon.KprobeLinuxBinprm{
-			Path: e.Value,
+			Path:       e.Value,
+			Flags:      path.FilePathFlagsToStr(e.Flags),
+			Permission: path.FilePathModeToStr(e.Permission),
 		}
 		a.Arg = &tetragon.KprobeArgument_LinuxBinprmArg{LinuxBinprmArg: lArg}
 		a.Label = e.Label
@@ -291,8 +302,8 @@ func GetProcessKprobe(event *MsgGenericKprobeUnix) *tetragon.ProcessKprobe {
 		}
 	}
 
-	var stackTrace []*tetragon.StackTraceEntry
-	for _, addr := range event.StackTrace {
+	var kernelStackTrace []*tetragon.StackTraceEntry
+	for _, addr := range event.KernelStackTrace {
 		if addr == 0 {
 			// the stack trace from the MsgGenericKprobeUnix is a fixed size
 			// array, [unix.PERF_MAX_STACK_DEPTH]uint64, used for binary decode,
@@ -315,23 +326,46 @@ func GetProcessKprobe(event *MsgGenericKprobeUnix) *tetragon.ProcessKprobe {
 			Offset: fnOffset.Offset,
 			Symbol: fnOffset.SymName,
 		}
-		if option.Config.ExposeKernelAddresses {
+		if option.Config.ExposeStackAddresses {
 			entry.Address = addr
 		}
-		stackTrace = append(stackTrace, entry)
+		kernelStackTrace = append(kernelStackTrace, entry)
+	}
+
+	var userStackTrace []*tetragon.StackTraceEntry
+	for _, addr := range event.UserStackTrace {
+		if addr == 0 {
+			continue
+		}
+		// TODO extract symbols from procfs
+		entry := &tetragon.StackTraceEntry{}
+		fsym, err := procsyms.GetFnSymbol(int(event.Msg.Tid), addr)
+		if err != nil {
+			logger.GetLogger().WithField("address", fmt.Sprintf("0x%x", addr)).Debug("stacktrace: failed to retrieve symbol, offset and module")
+			continue
+		}
+		entry.Offset = fsym.Offset
+		entry.Module = fsym.Module
+		entry.Symbol = fsym.Name
+		if option.Config.ExposeStackAddresses {
+			entry.Address = addr
+		}
+		userStackTrace = append(userStackTrace, entry)
 	}
 
 	tetragonEvent := &tetragon.ProcessKprobe{
-		Process:      tetragonProcess,
-		Parent:       tetragonParent,
-		FunctionName: event.FuncName,
-		Args:         tetragonArgs,
-		Return:       tetragonReturnArg,
-		Action:       kprobeAction(event.Msg.ActionId),
-		ReturnAction: kprobeAction(event.ReturnAction),
-		StackTrace:   stackTrace,
-		PolicyName:   event.PolicyName,
-		Message:      event.Message,
+		Process:          tetragonProcess,
+		Parent:           tetragonParent,
+		FunctionName:     event.FuncName,
+		Args:             tetragonArgs,
+		Return:           tetragonReturnArg,
+		Action:           kprobeAction(event.Msg.ActionId),
+		ReturnAction:     kprobeAction(event.ReturnAction),
+		KernelStackTrace: kernelStackTrace,
+		UserStackTrace:   userStackTrace,
+		PolicyName:       event.PolicyName,
+		Message:          event.Message,
+		Tags:             event.Tags,
 	}
 
 	if tetragonProcess.Pid == nil {
@@ -371,6 +405,7 @@ type MsgGenericTracepointUnix struct {
 	Args       []tracingapi.MsgGenericTracepointArg
 	PolicyName string
 	Message    string
+	Tags       []string
 }
 
 func (msg *MsgGenericTracepointUnix) Notify() bool {
@@ -493,6 +528,7 @@ func (msg *MsgGenericTracepointUnix) HandleMessage() *tetragon.GetEventsResponse
 		Args:       tetragonArgs,
 		PolicyName: msg.PolicyName,
 		Message:    msg.Message,
+		Tags:       msg.Tags,
 		Action:     kprobeAction(msg.Msg.ActionId),
 	}
 
@@ -540,13 +576,15 @@ func (msg *MsgGenericTracepointUnix) PolicyInfo() tracingpolicy.PolicyInfo {
 }
 
 type MsgGenericKprobeUnix struct {
-	Msg          *tracingapi.MsgGenericKprobe
-	ReturnAction uint64
-	FuncName     string
-	Args         []tracingapi.MsgGenericKprobeArg
-	PolicyName   string
-	Message      string
-	StackTrace   [unix.PERF_MAX_STACK_DEPTH]uint64
+	Msg              *tracingapi.MsgGenericKprobe
+	ReturnAction     uint64
+	FuncName         string
+	Args             []tracingapi.MsgGenericKprobeArg
+	PolicyName       string
+	Message          string
+	KernelStackTrace [unix.PERF_MAX_STACK_DEPTH]uint64
+	UserStackTrace   [unix.PERF_MAX_STACK_DEPTH]uint64
+	Tags             []string
 }
 
 func (msg *MsgGenericKprobeUnix) Notify() bool {
@@ -675,6 +713,7 @@ type MsgGenericUprobeUnix struct {
 	PolicyName string
 	Message    string
 	Args       []tracingapi.MsgGenericKprobeArg
+	Tags       []string
 }
 
 func (msg *MsgGenericUprobeUnix) Notify() bool {
@@ -730,6 +769,7 @@ func GetProcessUprobe(event *MsgGenericUprobeUnix) *tetragon.ProcessUprobe {
 		PolicyName: event.PolicyName,
 		Message:    event.Message,
 		Args:       tetragonArgs,
+		Tags:       event.Tags,
 	}
 
 	if tetragonProcess.Pid == nil {

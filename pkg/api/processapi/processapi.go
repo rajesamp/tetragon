@@ -40,8 +40,9 @@ const (
 	ExecveSetgidRoot = 0x10 // This binary execution gained new capabilities through setgid root execution
 
 	// flags of MsgCommon
-	MSG_COMMON_FLAG_RETURN     = 0x1
-	MSG_COMMON_FLAG_STACKTRACE = 0x2
+	MSG_COMMON_FLAG_RETURN            = 0x1
+	MSG_COMMON_FLAG_KERNEL_STACKTRACE = 0x2
+	MSG_COMMON_FLAG_USER_STACKTRACE   = 0x4
 
 	BINARY_PATH_MAX_LEN = 256
 )
@@ -90,7 +91,7 @@ type MsgK8sUnix struct {
 	Docker string
 }
 
-type MsgGenericCredMinimal struct {
+type MsgGenericCred struct {
 	Uid        uint32
 	Gid        uint32
 	Suid       uint32
@@ -101,6 +102,8 @@ type MsgGenericCredMinimal struct {
 	FSgid      uint32
 	SecureBits uint32
 	Pad        uint32
+	Cap        MsgCapabilities
+	UserNs     MsgUserNamespace
 }
 
 type MsgExecveEvent struct {
@@ -108,8 +111,7 @@ type MsgExecveEvent struct {
 	Kube           MsgK8s
 	Parent         MsgExecveKey
 	ParentFlags    uint64
-	Capabilities   MsgCapabilities
-	Creds          MsgGenericCredMinimal
+	Creds          MsgGenericCred
 	Namespaces     MsgNamespaces
 	CleanupProcess MsgExecveKey
 }

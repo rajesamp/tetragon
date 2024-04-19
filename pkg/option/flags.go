@@ -5,7 +5,6 @@ package option
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/cilium/tetragon/pkg/defaults"
@@ -63,11 +62,13 @@ const (
 	KeyExportAllowlist = "export-allowlist"
 	KeyExportDenylist  = "export-denylist"
 
-	KeyFieldFilters = "field-filters"
+	KeyFieldFilters     = "field-filters"
+	KeyRedactionFilters = "redaction-filters"
 
 	KeyNetnsDir = "netns-dir"
 
 	KeyDisableKprobeMulti = "disable-kprobe-multi"
+	KeyDisableUprobeMulti = "disable-uprobe-multi"
 
 	KeyRBSize      = "rb-size"
 	KeyRBSizeTotal = "rb-size-total"
@@ -89,6 +90,7 @@ const (
 	KeyEnablePodInfo          = "enable-pod-info"
 	KeyEnableTracingPolicyCRD = "enable-tracing-policy-crd"
 
+	KeyExposeStackAddresses  = "expose-stack-addresses"
 	KeyExposeKernelAddresses = "expose-kernel-addresses"
 
 	KeyGenerateDocs = "generate-docs"
@@ -133,7 +135,7 @@ func ReadAndSetFlags() error {
 	Config.DataCacheSize = viper.GetInt(KeyDataCacheSize)
 
 	Config.MetricsServer = viper.GetString(KeyMetricsServer)
-	Config.MetricsLabelFilter = ParseMetricsLabelFilter(viper.GetString(KeyMetricsLabelFilter))
+	Config.MetricsLabelFilter = parseMetricsLabelFilter(viper.GetString(KeyMetricsLabelFilter))
 	Config.ServerAddress = viper.GetString(KeyServerAddress)
 
 	Config.ExportFilename = viper.GetString(KeyExportFilename)
@@ -170,17 +172,17 @@ func ReadAndSetFlags() error {
 
 	Config.TracingPolicy = viper.GetString(KeyTracingPolicy)
 
-	Config.ExposeKernelAddresses = viper.GetBool(KeyExposeKernelAddresses)
+	// manually handle the deprecation of --expose-kernel-addresses
+	if viper.IsSet(KeyExposeKernelAddresses) {
+		log.Warnf("Flag --%s has been deprecated, please use --%s instead", KeyExposeKernelAddresses, KeyExposeStackAddresses)
+		Config.ExposeStackAddresses = viper.GetBool(KeyExposeKernelAddresses)
+	}
+	// if both --expose-kernel-addresses and --expose-stack-addresses are set, the latter takes priority
+	if viper.IsSet(KeyExposeStackAddresses) {
+		Config.ExposeStackAddresses = viper.GetBool(KeyExposeStackAddresses)
+	}
 
 	return nil
-}
-
-func ParseMetricsLabelFilter(labels string) map[string]interface{} {
-	result := make(map[string]interface{})
-	for _, label := range strings.Split(labels, ",") {
-		result[label] = nil
-	}
-	return result
 }
 
 func AddFlags(flags *pflag.FlagSet) {
@@ -209,7 +211,7 @@ func AddFlags(flags *pflag.FlagSet) {
 	flags.String(KeyK8sKubeConfigPath, "", "Absolute path of the kubernetes kubeconfig file")
 	flags.Bool(KeyEnableProcessAncestors, true, "Include ancestors in process exec events")
 	flags.String(KeyMetricsServer, "", "Metrics server address (e.g. ':2112'). Disabled by default")
-	flags.String(KeyMetricsLabelFilter, "", "Comma-separated list of enabled metric labels. (e.g. \"namespace,workload,pod,binary\") By default all labels are enabled.")
+	flags.String(KeyMetricsLabelFilter, "namespace,workload,pod,binary", "Comma-separated list of enabled metrics labels. Unknown labels will be ignored.")
 	flags.String(KeyServerAddress, "localhost:54321", "gRPC server address (e.g. 'localhost:54321' or 'unix:///var/run/tetragon/tetragon.sock'")
 	flags.String(KeyGopsAddr, "", "gops server address (e.g. 'localhost:8118'). Disabled by default")
 	flags.Bool(KeyEnableProcessCred, false, "Enable process_cred events")
@@ -242,6 +244,9 @@ func AddFlags(flags *pflag.FlagSet) {
 
 	// Field filters options for export
 	flags.String(KeyFieldFilters, "", "Field filters for event exports")
+
+	// Redaction filters
+	flags.String(KeyRedactionFilters, "", "Redaction filters for events")
 
 	// Network namespace options
 	flags.String(KeyNetnsDir, "/var/run/docker/netns/", "Network namespace dir")
@@ -276,6 +281,9 @@ func AddFlags(flags *pflag.FlagSet) {
 	flags.Bool(KeyEnableTracingPolicyCRD, true, "Enable TracingPolicy and TracingPolicyNamespaced custom resources")
 
 	flags.Bool(KeyExposeKernelAddresses, false, "Expose real kernel addresses in events stack traces")
+	flags.Bool(KeyExposeStackAddresses, false, "Expose real linear addresses in events stack traces")
+	flags.MarkHidden(KeyExposeKernelAddresses)
 
 	flags.Bool(KeyGenerateDocs, false, "Generate documentation in YAML format to stdout")
+
 }

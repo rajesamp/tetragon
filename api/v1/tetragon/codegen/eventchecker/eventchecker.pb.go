@@ -696,17 +696,19 @@ func (checker *ProcessExitChecker) FromProcessExit(event *tetragon.ProcessExit) 
 
 // ProcessKprobeChecker implements a checker struct to check a ProcessKprobe event
 type ProcessKprobeChecker struct {
-	CheckerName  string                       `json:"checkerName"`
-	Process      *ProcessChecker              `json:"process,omitempty"`
-	Parent       *ProcessChecker              `json:"parent,omitempty"`
-	FunctionName *stringmatcher.StringMatcher `json:"functionName,omitempty"`
-	Args         *KprobeArgumentListMatcher   `json:"args,omitempty"`
-	Return       *KprobeArgumentChecker       `json:"return,omitempty"`
-	Action       *KprobeActionChecker         `json:"action,omitempty"`
-	StackTrace   *StackTraceEntryListMatcher  `json:"stackTrace,omitempty"`
-	PolicyName   *stringmatcher.StringMatcher `json:"policyName,omitempty"`
-	ReturnAction *KprobeActionChecker         `json:"returnAction,omitempty"`
-	Message      *stringmatcher.StringMatcher `json:"message,omitempty"`
+	CheckerName      string                       `json:"checkerName"`
+	Process          *ProcessChecker              `json:"process,omitempty"`
+	Parent           *ProcessChecker              `json:"parent,omitempty"`
+	FunctionName     *stringmatcher.StringMatcher `json:"functionName,omitempty"`
+	Args             *KprobeArgumentListMatcher   `json:"args,omitempty"`
+	Return           *KprobeArgumentChecker       `json:"return,omitempty"`
+	Action           *KprobeActionChecker         `json:"action,omitempty"`
+	KernelStackTrace *StackTraceEntryListMatcher  `json:"kernelStackTrace,omitempty"`
+	PolicyName       *stringmatcher.StringMatcher `json:"policyName,omitempty"`
+	ReturnAction     *KprobeActionChecker         `json:"returnAction,omitempty"`
+	Message          *stringmatcher.StringMatcher `json:"message,omitempty"`
+	Tags             *StringListMatcher           `json:"tags,omitempty"`
+	UserStackTrace   *StackTraceEntryListMatcher  `json:"userStackTrace,omitempty"`
 }
 
 // CheckEvent checks a single event and implements the EventChecker interface
@@ -778,9 +780,9 @@ func (checker *ProcessKprobeChecker) Check(event *tetragon.ProcessKprobe) error 
 				return fmt.Errorf("Action check failed: %w", err)
 			}
 		}
-		if checker.StackTrace != nil {
-			if err := checker.StackTrace.Check(event.StackTrace); err != nil {
-				return fmt.Errorf("StackTrace check failed: %w", err)
+		if checker.KernelStackTrace != nil {
+			if err := checker.KernelStackTrace.Check(event.KernelStackTrace); err != nil {
+				return fmt.Errorf("KernelStackTrace check failed: %w", err)
 			}
 		}
 		if checker.PolicyName != nil {
@@ -796,6 +798,16 @@ func (checker *ProcessKprobeChecker) Check(event *tetragon.ProcessKprobe) error 
 		if checker.Message != nil {
 			if err := checker.Message.Match(event.Message); err != nil {
 				return fmt.Errorf("Message check failed: %w", err)
+			}
+		}
+		if checker.Tags != nil {
+			if err := checker.Tags.Check(event.Tags); err != nil {
+				return fmt.Errorf("Tags check failed: %w", err)
+			}
+		}
+		if checker.UserStackTrace != nil {
+			if err := checker.UserStackTrace.Check(event.UserStackTrace); err != nil {
+				return fmt.Errorf("UserStackTrace check failed: %w", err)
 			}
 		}
 		return nil
@@ -843,9 +855,9 @@ func (checker *ProcessKprobeChecker) WithAction(check tetragon.KprobeAction) *Pr
 	return checker
 }
 
-// WithStackTrace adds a StackTrace check to the ProcessKprobeChecker
-func (checker *ProcessKprobeChecker) WithStackTrace(check *StackTraceEntryListMatcher) *ProcessKprobeChecker {
-	checker.StackTrace = check
+// WithKernelStackTrace adds a KernelStackTrace check to the ProcessKprobeChecker
+func (checker *ProcessKprobeChecker) WithKernelStackTrace(check *StackTraceEntryListMatcher) *ProcessKprobeChecker {
+	checker.KernelStackTrace = check
 	return checker
 }
 
@@ -865,6 +877,18 @@ func (checker *ProcessKprobeChecker) WithReturnAction(check tetragon.KprobeActio
 // WithMessage adds a Message check to the ProcessKprobeChecker
 func (checker *ProcessKprobeChecker) WithMessage(check *stringmatcher.StringMatcher) *ProcessKprobeChecker {
 	checker.Message = check
+	return checker
+}
+
+// WithTags adds a Tags check to the ProcessKprobeChecker
+func (checker *ProcessKprobeChecker) WithTags(check *StringListMatcher) *ProcessKprobeChecker {
+	checker.Tags = check
+	return checker
+}
+
+// WithUserStackTrace adds a UserStackTrace check to the ProcessKprobeChecker
+func (checker *ProcessKprobeChecker) WithUserStackTrace(check *StackTraceEntryListMatcher) *ProcessKprobeChecker {
+	checker.UserStackTrace = check
 	return checker
 }
 
@@ -899,7 +923,7 @@ func (checker *ProcessKprobeChecker) FromProcessKprobe(event *tetragon.ProcessKp
 	checker.Action = NewKprobeActionChecker(event.Action)
 	{
 		var checks []*StackTraceEntryChecker
-		for _, check := range event.StackTrace {
+		for _, check := range event.KernelStackTrace {
 			var convertedCheck *StackTraceEntryChecker
 			if check != nil {
 				convertedCheck = NewStackTraceEntryChecker().FromStackTraceEntry(check)
@@ -908,11 +932,35 @@ func (checker *ProcessKprobeChecker) FromProcessKprobe(event *tetragon.ProcessKp
 		}
 		lm := NewStackTraceEntryListMatcher().WithOperator(listmatcher.Ordered).
 			WithValues(checks...)
-		checker.StackTrace = lm
+		checker.KernelStackTrace = lm
 	}
 	checker.PolicyName = stringmatcher.Full(event.PolicyName)
 	checker.ReturnAction = NewKprobeActionChecker(event.ReturnAction)
 	checker.Message = stringmatcher.Full(event.Message)
+	{
+		var checks []*stringmatcher.StringMatcher
+		for _, check := range event.Tags {
+			var convertedCheck *stringmatcher.StringMatcher
+			convertedCheck = stringmatcher.Full(check)
+			checks = append(checks, convertedCheck)
+		}
+		lm := NewStringListMatcher().WithOperator(listmatcher.Ordered).
+			WithValues(checks...)
+		checker.Tags = lm
+	}
+	{
+		var checks []*StackTraceEntryChecker
+		for _, check := range event.UserStackTrace {
+			var convertedCheck *StackTraceEntryChecker
+			if check != nil {
+				convertedCheck = NewStackTraceEntryChecker().FromStackTraceEntry(check)
+			}
+			checks = append(checks, convertedCheck)
+		}
+		lm := NewStackTraceEntryListMatcher().WithOperator(listmatcher.Ordered).
+			WithValues(checks...)
+		checker.UserStackTrace = lm
+	}
 	return checker
 }
 
@@ -1059,7 +1107,7 @@ func (checker *StackTraceEntryListMatcher) Check(values []*tetragon.StackTraceEn
 func (checker *StackTraceEntryListMatcher) orderedCheck(values []*tetragon.StackTraceEntry) error {
 	innerCheck := func(check *StackTraceEntryChecker, value *tetragon.StackTraceEntry) error {
 		if err := check.Check(value); err != nil {
-			return fmt.Errorf("StackTrace check failed: %w", err)
+			return fmt.Errorf("KernelStackTrace check failed: %w", err)
 		}
 		return nil
 	}
@@ -1091,7 +1139,7 @@ func (checker *StackTraceEntryListMatcher) unorderedCheck(values []*tetragon.Sta
 func (checker *StackTraceEntryListMatcher) subsetCheck(values []*tetragon.StackTraceEntry) error {
 	innerCheck := func(check *StackTraceEntryChecker, value *tetragon.StackTraceEntry) error {
 		if err := check.Check(value); err != nil {
-			return fmt.Errorf("StackTrace check failed: %w", err)
+			return fmt.Errorf("KernelStackTrace check failed: %w", err)
 		}
 		return nil
 	}
@@ -1116,6 +1164,106 @@ nextCheck:
 	return nil
 }
 
+// StringListMatcher checks a list of string fields
+type StringListMatcher struct {
+	Operator listmatcher.Operator           `json:"operator"`
+	Values   []*stringmatcher.StringMatcher `json:"values"`
+}
+
+// NewStringListMatcher creates a new StringListMatcher. The checker defaults to a subset checker unless otherwise specified using WithOperator()
+func NewStringListMatcher() *StringListMatcher {
+	return &StringListMatcher{
+		Operator: listmatcher.Subset,
+	}
+}
+
+// WithOperator sets the match kind for the StringListMatcher
+func (checker *StringListMatcher) WithOperator(operator listmatcher.Operator) *StringListMatcher {
+	checker.Operator = operator
+	return checker
+}
+
+// WithValues sets the checkers that the StringListMatcher should use
+func (checker *StringListMatcher) WithValues(values ...*stringmatcher.StringMatcher) *StringListMatcher {
+	checker.Values = values
+	return checker
+}
+
+// Check checks a list of string fields
+func (checker *StringListMatcher) Check(values []string) error {
+	switch checker.Operator {
+	case listmatcher.Ordered:
+		return checker.orderedCheck(values)
+	case listmatcher.Unordered:
+		return checker.unorderedCheck(values)
+	case listmatcher.Subset:
+		return checker.subsetCheck(values)
+	default:
+		return fmt.Errorf("Unhandled ListMatcher operator %s", checker.Operator)
+	}
+}
+
+// orderedCheck checks a list of ordered string fields
+func (checker *StringListMatcher) orderedCheck(values []string) error {
+	innerCheck := func(check *stringmatcher.StringMatcher, value string) error {
+		if err := check.Match(value); err != nil {
+			return fmt.Errorf("Tags check failed: %w", err)
+		}
+		return nil
+	}
+
+	if len(checker.Values) != len(values) {
+		return fmt.Errorf("StringListMatcher: Wanted %d elements, got %d", len(checker.Values), len(values))
+	}
+
+	for i, check := range checker.Values {
+		value := values[i]
+		if err := innerCheck(check, value); err != nil {
+			return fmt.Errorf("StringListMatcher: Check failed on element %d: %w", i, err)
+		}
+	}
+
+	return nil
+}
+
+// unorderedCheck checks a list of unordered string fields
+func (checker *StringListMatcher) unorderedCheck(values []string) error {
+	if len(checker.Values) != len(values) {
+		return fmt.Errorf("StringListMatcher: Wanted %d elements, got %d", len(checker.Values), len(values))
+	}
+
+	return checker.subsetCheck(values)
+}
+
+// subsetCheck checks a subset of string fields
+func (checker *StringListMatcher) subsetCheck(values []string) error {
+	innerCheck := func(check *stringmatcher.StringMatcher, value string) error {
+		if err := check.Match(value); err != nil {
+			return fmt.Errorf("Tags check failed: %w", err)
+		}
+		return nil
+	}
+
+	numDesired := len(checker.Values)
+	numMatched := 0
+
+nextCheck:
+	for _, check := range checker.Values {
+		for _, value := range values {
+			if err := innerCheck(check, value); err == nil {
+				numMatched += 1
+				continue nextCheck
+			}
+		}
+	}
+
+	if numMatched < numDesired {
+		return fmt.Errorf("StringListMatcher: Check failed, only matched %d elements but wanted %d", numMatched, numDesired)
+	}
+
+	return nil
+}
+
 // ProcessTracepointChecker implements a checker struct to check a ProcessTracepoint event
 type ProcessTracepointChecker struct {
 	CheckerName string                       `json:"checkerName"`
@@ -1127,6 +1275,7 @@ type ProcessTracepointChecker struct {
 	PolicyName  *stringmatcher.StringMatcher `json:"policyName,omitempty"`
 	Action      *KprobeActionChecker         `json:"action,omitempty"`
 	Message     *stringmatcher.StringMatcher `json:"message,omitempty"`
+	Tags        *StringListMatcher           `json:"tags,omitempty"`
 }
 
 // CheckEvent checks a single event and implements the EventChecker interface
@@ -1208,6 +1357,11 @@ func (checker *ProcessTracepointChecker) Check(event *tetragon.ProcessTracepoint
 				return fmt.Errorf("Message check failed: %w", err)
 			}
 		}
+		if checker.Tags != nil {
+			if err := checker.Tags.Check(event.Tags); err != nil {
+				return fmt.Errorf("Tags check failed: %w", err)
+			}
+		}
 		return nil
 	}
 	if err := fieldChecks(); err != nil {
@@ -1265,6 +1419,12 @@ func (checker *ProcessTracepointChecker) WithMessage(check *stringmatcher.String
 	return checker
 }
 
+// WithTags adds a Tags check to the ProcessTracepointChecker
+func (checker *ProcessTracepointChecker) WithTags(check *StringListMatcher) *ProcessTracepointChecker {
+	checker.Tags = check
+	return checker
+}
+
 //FromProcessTracepoint populates the ProcessTracepointChecker using data from a ProcessTracepoint event
 func (checker *ProcessTracepointChecker) FromProcessTracepoint(event *tetragon.ProcessTracepoint) *ProcessTracepointChecker {
 	if event == nil {
@@ -1294,6 +1454,17 @@ func (checker *ProcessTracepointChecker) FromProcessTracepoint(event *tetragon.P
 	checker.PolicyName = stringmatcher.Full(event.PolicyName)
 	checker.Action = NewKprobeActionChecker(event.Action)
 	checker.Message = stringmatcher.Full(event.Message)
+	{
+		var checks []*stringmatcher.StringMatcher
+		for _, check := range event.Tags {
+			var convertedCheck *stringmatcher.StringMatcher
+			convertedCheck = stringmatcher.Full(check)
+			checks = append(checks, convertedCheck)
+		}
+		lm := NewStringListMatcher().WithOperator(listmatcher.Ordered).
+			WithValues(checks...)
+		checker.Tags = lm
+	}
 	return checker
 }
 
@@ -1307,6 +1478,7 @@ type ProcessUprobeChecker struct {
 	PolicyName  *stringmatcher.StringMatcher `json:"policyName,omitempty"`
 	Message     *stringmatcher.StringMatcher `json:"message,omitempty"`
 	Args        *KprobeArgumentListMatcher   `json:"args,omitempty"`
+	Tags        *StringListMatcher           `json:"tags,omitempty"`
 }
 
 // CheckEvent checks a single event and implements the EventChecker interface
@@ -1383,6 +1555,11 @@ func (checker *ProcessUprobeChecker) Check(event *tetragon.ProcessUprobe) error 
 				return fmt.Errorf("Args check failed: %w", err)
 			}
 		}
+		if checker.Tags != nil {
+			if err := checker.Tags.Check(event.Tags); err != nil {
+				return fmt.Errorf("Tags check failed: %w", err)
+			}
+		}
 		return nil
 	}
 	if err := fieldChecks(); err != nil {
@@ -1433,6 +1610,12 @@ func (checker *ProcessUprobeChecker) WithArgs(check *KprobeArgumentListMatcher) 
 	return checker
 }
 
+// WithTags adds a Tags check to the ProcessUprobeChecker
+func (checker *ProcessUprobeChecker) WithTags(check *StringListMatcher) *ProcessUprobeChecker {
+	checker.Tags = check
+	return checker
+}
+
 //FromProcessUprobe populates the ProcessUprobeChecker using data from a ProcessUprobe event
 func (checker *ProcessUprobeChecker) FromProcessUprobe(event *tetragon.ProcessUprobe) *ProcessUprobeChecker {
 	if event == nil {
@@ -1460,6 +1643,17 @@ func (checker *ProcessUprobeChecker) FromProcessUprobe(event *tetragon.ProcessUp
 		lm := NewKprobeArgumentListMatcher().WithOperator(listmatcher.Ordered).
 			WithValues(checks...)
 		checker.Args = lm
+	}
+	{
+		var checks []*stringmatcher.StringMatcher
+		for _, check := range event.Tags {
+			var convertedCheck *stringmatcher.StringMatcher
+			convertedCheck = stringmatcher.Full(check)
+			checks = append(checks, convertedCheck)
+		}
+		lm := NewStringListMatcher().WithOperator(listmatcher.Ordered).
+			WithValues(checks...)
+		checker.Tags = lm
 	}
 	return checker
 }
@@ -4092,11 +4286,62 @@ func (checker *KprobeSkbChecker) FromKprobeSkb(event *tetragon.KprobeSkb) *Kprob
 	return checker
 }
 
+// KprobeNetDevChecker implements a checker struct to check a KprobeNetDev field
+type KprobeNetDevChecker struct {
+	Name *stringmatcher.StringMatcher `json:"name,omitempty"`
+}
+
+// NewKprobeNetDevChecker creates a new KprobeNetDevChecker
+func NewKprobeNetDevChecker() *KprobeNetDevChecker {
+	return &KprobeNetDevChecker{}
+}
+
+// Get the type of the checker as a string
+func (checker *KprobeNetDevChecker) GetCheckerType() string {
+	return "KprobeNetDevChecker"
+}
+
+// Check checks a KprobeNetDev field
+func (checker *KprobeNetDevChecker) Check(event *tetragon.KprobeNetDev) error {
+	if event == nil {
+		return fmt.Errorf("%s: KprobeNetDev field is nil", CheckerLogPrefix(checker))
+	}
+
+	fieldChecks := func() error {
+		if checker.Name != nil {
+			if err := checker.Name.Match(event.Name); err != nil {
+				return fmt.Errorf("Name check failed: %w", err)
+			}
+		}
+		return nil
+	}
+	if err := fieldChecks(); err != nil {
+		return fmt.Errorf("%s: %w", CheckerLogPrefix(checker), err)
+	}
+	return nil
+}
+
+// WithName adds a Name check to the KprobeNetDevChecker
+func (checker *KprobeNetDevChecker) WithName(check *stringmatcher.StringMatcher) *KprobeNetDevChecker {
+	checker.Name = check
+	return checker
+}
+
+//FromKprobeNetDev populates the KprobeNetDevChecker using data from a KprobeNetDev field
+func (checker *KprobeNetDevChecker) FromKprobeNetDev(event *tetragon.KprobeNetDev) *KprobeNetDevChecker {
+	if event == nil {
+		return checker
+	}
+	checker.Name = stringmatcher.Full(event.Name)
+	return checker
+}
+
 // KprobePathChecker implements a checker struct to check a KprobePath field
 type KprobePathChecker struct {
-	Mount *stringmatcher.StringMatcher `json:"mount,omitempty"`
-	Path  *stringmatcher.StringMatcher `json:"path,omitempty"`
-	Flags *stringmatcher.StringMatcher `json:"flags,omitempty"`
+	Mount      *stringmatcher.StringMatcher `json:"mount,omitempty"`
+	Path       *stringmatcher.StringMatcher `json:"path,omitempty"`
+	Flags      *stringmatcher.StringMatcher `json:"flags,omitempty"`
+	Permission *stringmatcher.StringMatcher `json:"permission,omitempty"`
 }
 
 // NewKprobePathChecker creates a new KprobePathChecker
@@ -4131,6 +4376,11 @@ func (checker *KprobePathChecker) Check(event *tetragon.KprobePath) error {
 				return fmt.Errorf("Flags check failed: %w", err)
 			}
 		}
+		if checker.Permission != nil {
+			if err := checker.Permission.Match(event.Permission); err != nil {
+				return fmt.Errorf("Permission check failed: %w", err)
+			}
+		}
 		return nil
 	}
 	if err := fieldChecks(); err != nil {
@@ -4157,6 +4407,12 @@ func (checker *KprobePathChecker) WithFlags(check *stringmatcher.StringMatcher) 
 	return checker
 }
 
+// WithPermission adds a Permission check to the KprobePathChecker
+func (checker *KprobePathChecker) WithPermission(check *stringmatcher.StringMatcher) *KprobePathChecker {
+	checker.Permission = check
+	return checker
+}
+
 //FromKprobePath populates the KprobePathChecker using data from a KprobePath field
 func (checker *KprobePathChecker) FromKprobePath(event *tetragon.KprobePath) *KprobePathChecker {
 	if event == nil {
@@ -4165,14 +4421,16 @@ func (checker *KprobePathChecker) FromKprobePath(event *tetragon.KprobePath) *Kp
 	checker.Mount = stringmatcher.Full(event.Mount)
 	checker.Path = stringmatcher.Full(event.Path)
 	checker.Flags = stringmatcher.Full(event.Flags)
+	checker.Permission = stringmatcher.Full(event.Permission)
 	return checker
 }
 
 // KprobeFileChecker implements a checker struct to check a KprobeFile field
 type KprobeFileChecker struct {
-	Mount *stringmatcher.StringMatcher `json:"mount,omitempty"`
-	Path  *stringmatcher.StringMatcher `json:"path,omitempty"`
-	Flags *stringmatcher.StringMatcher `json:"flags,omitempty"`
+	Mount      *stringmatcher.StringMatcher `json:"mount,omitempty"`
+	Path       *stringmatcher.StringMatcher `json:"path,omitempty"`
+	Flags      *stringmatcher.StringMatcher `json:"flags,omitempty"`
+	Permission *stringmatcher.StringMatcher `json:"permission,omitempty"`
 }
 
 // NewKprobeFileChecker creates a new KprobeFileChecker
@@ -4207,6 +4465,11 @@ func (checker *KprobeFileChecker) Check(event *tetragon.KprobeFile) error {
 				return fmt.Errorf("Flags check failed: %w", err)
 			}
 		}
+		if checker.Permission != nil {
+			if err := checker.Permission.Match(event.Permission); err != nil {
+				return fmt.Errorf("Permission check failed: %w", err)
+			}
+		}
 		return nil
 	}
 	if err := fieldChecks(); err != nil {
@@ -4233,6 +4496,12 @@ func (checker *KprobeFileChecker) WithFlags(check *stringmatcher.StringMatcher) 
 	return checker
 }
 
+// WithPermission adds a Permission check to the KprobeFileChecker
+func (checker *KprobeFileChecker) WithPermission(check *stringmatcher.StringMatcher) *KprobeFileChecker {
+	checker.Permission = check
+	return checker
+}
+
 //FromKprobeFile populates the KprobeFileChecker using data from a KprobeFile field
 func (checker *KprobeFileChecker) FromKprobeFile(event *tetragon.KprobeFile) *KprobeFileChecker {
 	if event == nil {
@@ -4241,6 +4510,7 @@ func (checker *KprobeFileChecker) FromKprobeFile(event *tetragon.KprobeFile) *Kp
 	checker.Mount = stringmatcher.Full(event.Mount)
 	checker.Path = stringmatcher.Full(event.Path)
 	checker.Flags = stringmatcher.Full(event.Flags)
+	checker.Permission = stringmatcher.Full(event.Permission)
 	return checker
 }
 
@@ -4418,7 +4688,9 @@ func (checker *KprobeCredChecker) FromKprobeCred(event *tetragon.KprobeCred) *Kp
 
 // KprobeLinuxBinprmChecker implements a checker struct to check a KprobeLinuxBinprm field
 type KprobeLinuxBinprmChecker struct {
-	Path *stringmatcher.StringMatcher `json:"path,omitempty"`
+	Path       *stringmatcher.StringMatcher `json:"path,omitempty"`
+	Flags      *stringmatcher.StringMatcher `json:"flags,omitempty"`
+	Permission *stringmatcher.StringMatcher `json:"permission,omitempty"`
 }
 
 // NewKprobeLinuxBinprmChecker creates a new KprobeLinuxBinprmChecker
@@ -4443,6 +4715,16 @@ func (checker *KprobeLinuxBinprmChecker) Check(event *tetragon.KprobeLinuxBinprm
 				return fmt.Errorf("Path check failed: %w", err)
 			}
 		}
+		if checker.Flags != nil {
+			if err := checker.Flags.Match(event.Flags); err != nil {
+				return fmt.Errorf("Flags check failed: %w", err)
+			}
+		}
+		if checker.Permission != nil {
+			if err := checker.Permission.Match(event.Permission); err != nil {
+				return fmt.Errorf("Permission check failed: %w", err)
+			}
+		}
 		return nil
 	}
 	if err := fieldChecks(); err != nil {
@@ -4457,12 +4739,26 @@ func (checker *KprobeLinuxBinprmChecker) WithPath(check *stringmatcher.StringMat
 	return checker
 }
 
+// WithFlags adds a Flags check to the KprobeLinuxBinprmChecker
+func (checker *KprobeLinuxBinprmChecker) WithFlags(check *stringmatcher.StringMatcher) *KprobeLinuxBinprmChecker {
+	checker.Flags = check
+	return checker
+}
+
+// WithPermission adds a Permission check to the KprobeLinuxBinprmChecker
+func (checker *KprobeLinuxBinprmChecker) WithPermission(check *stringmatcher.StringMatcher) *KprobeLinuxBinprmChecker {
+	checker.Permission = check
+	return checker
+}
+
 //FromKprobeLinuxBinprm populates the KprobeLinuxBinprmChecker using data from a KprobeLinuxBinprm field
 func (checker *KprobeLinuxBinprmChecker) FromKprobeLinuxBinprm(event *tetragon.KprobeLinuxBinprm) *KprobeLinuxBinprmChecker {
 	if event == nil {
 		return checker
 	}
 	checker.Path = stringmatcher.Full(event.Path)
+	checker.Flags = stringmatcher.Full(event.Flags)
+	checker.Permission = stringmatcher.Full(event.Permission)
 	return checker
 }
 
@@ -4956,6 +5252,7 @@ type KprobeArgumentChecker struct {
 	CapPermittedArg       *stringmatcher.StringMatcher `json:"capPermittedArg,omitempty"`
 	CapEffectiveArg       *stringmatcher.StringMatcher `json:"capEffectiveArg,omitempty"`
 	LinuxBinprmArg        *KprobeLinuxBinprmChecker    `json:"linuxBinprmArg,omitempty"`
+	NetDevArg             *KprobeNetDevChecker         `json:"netDevArg,omitempty"`
 	Label                 *stringmatcher.StringMatcher `json:"label,omitempty"`
 }
 
@@ -5226,6 +5523,16 @@ func (checker *KprobeArgumentChecker) Check(event *tetragon.KprobeArgument) erro
 				return fmt.Errorf("KprobeArgumentChecker: LinuxBinprmArg check failed: %T is not a LinuxBinprmArg", event)
 			}
 		}
+		if checker.NetDevArg != nil {
+			switch event := event.Arg.(type) {
+			case *tetragon.KprobeArgument_NetDevArg:
+				if err := checker.NetDevArg.Check(event.NetDevArg); err != nil {
+					return fmt.Errorf("NetDevArg check failed: %w", err)
+				}
+			default:
+				return fmt.Errorf("KprobeArgumentChecker: NetDevArg check failed: %T is not a NetDevArg", event)
+			}
+		}
 		if checker.Label != nil {
 			if err := checker.Label.Match(event.Label); err != nil {
 				return fmt.Errorf("Label check failed: %w", err)
@@ -5389,6 +5696,12 @@ func (checker *KprobeArgumentChecker) WithLinuxBinprmArg(check *KprobeLinuxBinpr
 	return checker
 }
 
+// WithNetDevArg adds a NetDevArg check to the KprobeArgumentChecker
+func (checker *KprobeArgumentChecker) WithNetDevArg(check *KprobeNetDevChecker) *KprobeArgumentChecker {
+	checker.NetDevArg = check
+	return checker
+}
+
 // WithLabel adds a Label check to the KprobeArgumentChecker
 func (checker *KprobeArgumentChecker) WithLabel(check *stringmatcher.StringMatcher) *KprobeArgumentChecker {
 	checker.Label = check
@@ -5540,6 +5853,12 @@ func (checker *KprobeArgumentChecker) FromKprobeArgument(event *tetragon.KprobeA
 	case *tetragon.KprobeArgument_LinuxBinprmArg:
 		if event.LinuxBinprmArg != nil {
 			checker.LinuxBinprmArg = NewKprobeLinuxBinprmChecker().FromKprobeLinuxBinprm(event.LinuxBinprmArg)
+		}
+	}
+	switch event := event.Arg.(type) {
+	case *tetragon.KprobeArgument_NetDevArg:
+		if event.NetDevArg != nil {
+			checker.NetDevArg = NewKprobeNetDevChecker().FromKprobeNetDev(event.NetDevArg)
 		}
 	}
 	checker.Label = stringmatcher.Full(event.Label)
@@ -5743,6 +6062,7 @@ type StackTraceEntryChecker struct {
 	Address *uint64                      `json:"address,omitempty"`
 	Offset  *uint64                      `json:"offset,omitempty"`
 	Symbol  *stringmatcher.StringMatcher `json:"symbol,omitempty"`
+	Module  *stringmatcher.StringMatcher `json:"module,omitempty"`
 }
 
 // NewStackTraceEntryChecker creates a new StackTraceEntryChecker
@@ -5777,6 +6097,11 @@ func (checker *StackTraceEntryChecker) Check(event *tetragon.StackTraceEntry) er
 				return fmt.Errorf("Symbol check failed: %w", err)
 			}
 		}
+		if checker.Module != nil {
+			if err := checker.Module.Match(event.Module); err != nil {
+				return fmt.Errorf("Module check failed: %w", err)
+			}
+		}
 		return nil
 	}
 	if err := fieldChecks(); err != nil {
@@ -5803,6 +6128,12 @@ func (checker *StackTraceEntryChecker) WithSymbol(check *stringmatcher.StringMat
 	return checker
 }
 
+// WithModule adds a Module check to the StackTraceEntryChecker
+func (checker *StackTraceEntryChecker) WithModule(check *stringmatcher.StringMatcher) *StackTraceEntryChecker {
+	checker.Module = check
+	return checker
+}
+
 //FromStackTraceEntry populates the StackTraceEntryChecker using data from a StackTraceEntry field
 func (checker *StackTraceEntryChecker) FromStackTraceEntry(event *tetragon.StackTraceEntry) *StackTraceEntryChecker {
 	if event == nil {
@@ -5817,6 +6148,7 @@ func (checker *StackTraceEntryChecker) FromStackTraceEntry(event *tetragon.Stack
 		checker.Offset = &val
 	}
 	checker.Symbol = stringmatcher.Full(event.Symbol)
+	checker.Module = stringmatcher.Full(event.Module)
 	return checker
 }
 

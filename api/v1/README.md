@@ -28,6 +28,7 @@
     - [KprobeCred](#tetragon-KprobeCred)
     - [KprobeFile](#tetragon-KprobeFile)
     - [KprobeLinuxBinprm](#tetragon-KprobeLinuxBinprm)
+    - [KprobeNetDev](#tetragon-KprobeNetDev)
     - [KprobePath](#tetragon-KprobePath)
     - [KprobePerfEvent](#tetragon-KprobePerfEvent)
     - [KprobeSkb](#tetragon-KprobeSkb)
@@ -67,6 +68,7 @@
     - [GetEventsRequest](#tetragon-GetEventsRequest)
     - [GetEventsResponse](#tetragon-GetEventsResponse)
     - [RateLimitInfo](#tetragon-RateLimitInfo)
+    - [RedactionFilter](#tetragon-RedactionFilter)
   
     - [EventType](#tetragon-EventType)
     - [FieldFilterAction](#tetragon-FieldFilterAction)
@@ -287,6 +289,7 @@ https://github.com/opencontainers/runtime-spec/blob/main/config.md#createcontain
 | cgroupsPath | [string](#string) |  | cgroupsPath is the cgroups path for the container. The path is expected to be relative to the cgroups mountpoint. See: https://github.com/opencontainers/runtime-spec/blob/58ec43f9fc39e0db229b653ae98295bfde74aeab/specs-go/config.go#L174 |
 | rootDir | [string](#string) |  | rootDir is the absolute path of the root directory of the container. See: https://github.com/opencontainers/runtime-spec/blob/main/specs-go/config.go#L174 |
 | annotations | [CreateContainer.AnnotationsEntry](#tetragon-CreateContainer-AnnotationsEntry) | repeated | annotations are the run-time annotations for the container see https://github.com/opencontainers/runtime-spec/blob/main/config.md#annotations |
+| containerName | [string](#string) |  | containerName is the name of the container |
 
 
 
@@ -454,6 +457,7 @@ https://github.com/opencontainers/runtime-spec/blob/main/config.md#createcontain
 | cap_permitted_arg | [string](#string) |  | Capabilities that are currently permitted in hexadecimal format. |
 | cap_effective_arg | [string](#string) |  | Capabilities that are actually used in hexadecimal format. |
 | linux_binprm_arg | [KprobeLinuxBinprm](#tetragon-KprobeLinuxBinprm) |  |  |
+| net_dev_arg | [KprobeNetDev](#tetragon-KprobeNetDev) |  |  |
 | label | [string](#string) |  |  |
 
 
@@ -541,6 +545,7 @@ https://github.com/opencontainers/runtime-spec/blob/main/config.md#createcontain
 | mount | [string](#string) |  |  |
 | path | [string](#string) |  |  |
 | flags | [string](#string) |  |  |
+| permission | [string](#string) |  |  |
 
 
 
@@ -556,6 +561,23 @@ https://github.com/opencontainers/runtime-spec/blob/main/config.md#createcontain
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | path | [string](#string) |  |  |
+| flags | [string](#string) |  |  |
+| permission | [string](#string) |  |  |
+
+
+
+
+
+
+<a name="tetragon-KprobeNetDev"></a>
+
+### KprobeNetDev
+
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| name | [string](#string) |  |  |
 
 
 
@@ -573,6 +595,7 @@ https://github.com/opencontainers/runtime-spec/blob/main/config.md#createcontain
 | mount | [string](#string) |  |  |
 | path | [string](#string) |  |  |
 | flags | [string](#string) |  |  |
+| permission | [string](#string) |  |  |
 
 
 
@@ -866,10 +889,12 @@ https://github.com/opencontainers/runtime-spec/blob/main/config.md#createcontain
 | args | [KprobeArgument](#tetragon-KprobeArgument) | repeated | Arguments definition of the observed kprobe. |
 | return | [KprobeArgument](#tetragon-KprobeArgument) |  | Return value definition of the observed kprobe. |
 | action | [KprobeAction](#tetragon-KprobeAction) |  | Action performed when the kprobe matched. |
-| stack_trace | [StackTraceEntry](#tetragon-StackTraceEntry) | repeated | Kernel stack trace to the call. |
+| kernel_stack_trace | [StackTraceEntry](#tetragon-StackTraceEntry) | repeated | Kernel stack trace to the call. |
 | policy_name | [string](#string) |  | Name of the Tracing Policy that created that kprobe. |
 | return_action | [KprobeAction](#tetragon-KprobeAction) |  | Action performed when the return kprobe executed. |
 | message | [string](#string) |  | Short message of the Tracing Policy to inform users what is going on. |
+| tags | [string](#string) | repeated | Tags of the Tracing Policy to categorize the event. |
+| user_stack_trace | [StackTraceEntry](#tetragon-StackTraceEntry) | repeated | User-mode stack trace to the call. |
 
 
 
@@ -909,6 +934,7 @@ loader sensor event triggered for loaded binary/library
 | policy_name | [string](#string) |  | Name of the policy that created that tracepoint. |
 | action | [KprobeAction](#tetragon-KprobeAction) |  | Action performed when the tracepoint matched. |
 | message | [string](#string) |  | Short message of the Tracing Policy to inform users what is going on. |
+| tags | [string](#string) | repeated | Tags of the Tracing Policy to categorize the event. |
 
 
 
@@ -930,6 +956,7 @@ loader sensor event triggered for loaded binary/library
 | policy_name | [string](#string) |  | Name of the policy that created that uprobe. |
 | message | [string](#string) |  | Short message of the Tracing Policy to inform users what is going on. |
 | args | [KprobeArgument](#tetragon-KprobeArgument) | repeated | Arguments definition of the observed uprobe. |
+| tags | [string](#string) | repeated | Tags of the Tracing Policy to categorize the event. |
 
 
 
@@ -969,9 +996,10 @@ RuntimeHookRequest synchronously propagates information to the agent about run-t
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| address | [uint64](#uint64) |  | address is the kernel function address. |
+| address | [uint64](#uint64) |  | linear address of the function in kernel or user space. |
 | offset | [uint64](#uint64) |  | offset is the offset into the native instructions for the function. |
 | symbol | [string](#string) |  | symbol is the symbol name of the function. |
+| module | [string](#string) |  | module path for user space addresses. |
 
 
 
@@ -1263,6 +1291,23 @@ Capability set to filter over. NOTE: you may specify only ONE set here.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | number_of_dropped_process_events | [uint64](#uint64) |  |  |
+
+
+
+
+
+
+<a name="tetragon-RedactionFilter"></a>
+
+### RedactionFilter
+
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| match | [Filter](#tetragon-Filter) | repeated | **Deprecated.** Deprecated, do not use. |
+| redact | [string](#string) | repeated | Regular expressions to use for redaction. Strings inside capture groups are redacted. |
+| binary_regex | [string](#string) | repeated | Regular expression to match binary name. If supplied, redactions will only be applied to matching processes. |
 
 
 
