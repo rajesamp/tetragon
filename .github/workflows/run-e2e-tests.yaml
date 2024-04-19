@@ -39,8 +39,6 @@ jobs:
 
     - name: Set Up Job Variables
       id: vars
-      env:
-        SHA: latest
       run: |
         if [ ${{ github.event.issue.pull_request || github.event.pull_request }} ]; then
           PR_API_JSON=$(curl \
@@ -52,8 +50,8 @@ jobs:
           SHA=${{ github.sha }}
         fi
         echo "sha=${SHA}" >> $GITHUB_OUTPUT
-        echo "agentImage=quay.io/cilium/tetragon-ci:${SHA}" >> $GITHUB_OUTPUT
-        echo "operatorImage=quay.io/cilium/tetragon-operator-ci:${SHA}" >> $GITHUB_OUTPUT
+        echo "agentImage=quay.io/cilium/tetragon-ci:latest" >> $GITHUB_OUTPUT
+        echo "operatorImage=quay.io/cilium/tetragon-operator-ci:latest" >> $GITHUB_OUTPUT
 
     - name: Install kubectl, kind and cilium CLI
       uses: alexellis/arkade-get@master
