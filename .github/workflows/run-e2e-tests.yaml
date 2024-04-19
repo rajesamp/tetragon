@@ -5,7 +5,7 @@ on:
       - 'docs/**'
   push:
     branches:
-      - main
+      - '**'
     paths-ignore:
       - 'docs/**'
 
@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-22.04, actuated-arm64-4cpu-16gb ]
+        os: [ ubuntu-22.04 ]
     steps:
     - name: Checkout Code
       uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
@@ -39,6 +39,8 @@ jobs:
 
     - name: Set Up Job Variables
       id: vars
+      env:
+        SHA: latest
       run: |
         if [ ${{ github.event.issue.pull_request || github.event.pull_request }} ]; then
           PR_API_JSON=$(curl \
